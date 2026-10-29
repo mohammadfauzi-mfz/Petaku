@@ -1,0 +1,8 @@
+{
+  "appId": "id.bpn.petasbi",
+  "appName": "Peta SBI",
+  "webDir": "www",
+  "android": {
+    "allowMixedContent": false
+  }
+}
