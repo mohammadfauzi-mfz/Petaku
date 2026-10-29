@@ -6,6 +6,13 @@ import { renderTheme } from './ui-theme.js';
 import { renderLayers } from './ui-layers.js';
 import { renderExport } from './ui-export.js';
 import { openSheet, closeTopSheet } from './ui-common.js';
+import { openSettings } from './ui-settings.js';
+import { importCSVFile } from './ui-data.js';
+import { importLayerFile } from './ui-layers.js';
+import { checkRemote } from './sync.js';
+import { checkUpdate, BUILD } from './update.js';
+import { petaku } from './native.js';
+import { base64ToBytes } from './util.js';
 
 let page = 'map';
 const renderers = { data: renderData, theme: renderTheme, layers: renderLayers, export: renderExport };
@@ -24,15 +31,45 @@ function fillThemeSel() {
   sel.value = S.themeId;
 }
 
-function about() {
-  const wa = '6285252390543';
-  const body = h('div', {},
-    h('p', {}, h('b', {}, 'Peta SBI'), ' — pewarna peta blok dari CSV. Impor CSV, pilih jenis peta, atur warna & layer, lalu ekspor PDF/PNG.'),
-    h('p', { class: 'mut' }, 'Kiat: buat jenis peta baru di tab Tema (Salin tema lalu ubah kolom, kelas, dan judul). Layer tambahan (GeoJSON/KML/CSV titik) diimpor dari tab Layer.'),
-    h('p', {}, 'Create By Mohammad Fauzi'),
-    h('p', {}, 'Contact Me for Suggestion & Feedback ', h('a', { href: 'https://wa.me/' + wa, target: '_blank', rel: 'noopener', style: { textDecoration: 'none', fontSize: '20px' }, 'aria-label': 'WhatsApp' }, '💬')),
-    h('p', { class: 'mut', style: { textAlign: 'center', marginTop: '22px' } }, 'Versi Aplikasi ' + VERSION));
-  openSheet('Tentang aplikasi', body);
+const seenIncoming = new Set();
+async function handleIncoming(r) {
+  if (!r || !r.data || seenIncoming.has(r.id)) return;
+  seenIncoming.add(r.id);
+  const name = r.name || 'berkas';
+  const file = new File([base64ToBytes(r.data)], name);
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  try {
+    if (ext === 'kml' || ext === 'geojson') { showPage('layers'); await importLayerFile(file); return; }
+    if (ext === 'json') {
+      const txt = await file.text();
+      let o = null; try { o = JSON.parse(txt); } catch (e) { /* abaikan */ }
+      if (o && Array.isArray(o.classes)) { toast('Berkas tema: impor lewat tab Tema → Impor tema', 4500); showPage('theme'); return; }
+      showPage('layers'); await importLayerFile(file); return;
+    }
+    showPage('data');
+    await importCSVFile(file);
+    renderData();
+  } catch (e) { console.error(e); toast('Gagal membuka ' + name + ': ' + e.message, 4500); }
+}
+async function takeIncoming() {
+  const P = petaku();
+  if (!P) return;
+  try { const r = await P.getPending(); if (r && r.data) await handleIncoming(r); } catch (e) { console.error(e); }
+}
+
+async function startupChecks() {
+  const c = S.sync;
+  if (!c || !/^[\w.-]+\/[\w.-]+$/.test(c.repo || '')) return;
+  try {
+    const r = await checkRemote();
+    if (r.manifest && r.newer) toast('Ada data baru di GitHub → Pengaturan (⚙) → Tarik data terbaru', 6000);
+  } catch (e) { /* offline / tidak ada akses: diam saja */ }
+  if (Date.now() - (c.lastUpdateCheck || 0) > 12 * 3600 * 1000 && BUILD > 0) {
+    try {
+      const u = await checkUpdate();
+      if (u.available) toast('Pembaruan Petaku tersedia (' + (u.tag || '') + ') → Pengaturan (⚙)', 6500);
+    } catch (e) { /* diam */ }
+  }
 }
 
 async function boot() {
@@ -41,7 +78,7 @@ async function boot() {
   initMap();
   $('#themeSel').addEventListener('change', (e) => { S.themeId = e.target.value; bump('theme'); if (page !== 'map') renderers[page] && renderers[page](); });
   $$('#nav button').forEach((b) => b.addEventListener('click', () => showPage(b.dataset.p)));
-  $('#btnInfo').addEventListener('click', about);
+  $('#btnInfo').addEventListener('click', openSettings);
   onChange((k) => { if (k === 'theme' || k === 'themes') fillThemeSel(); if (page === 'data' && (k === 'data' || k === 'layers')) renderData(); });
   // muat layer yang terlihat
   const vis = S.layers.filter((l) => l.visible);
@@ -63,6 +100,14 @@ async function boot() {
       cap.Plugins.App.exitApp();
     });
   }
-  window.__app = { S, showPage };
+  // berkas yang dibuka dari WhatsApp / pengelola berkas (Android)
+  const P = petaku();
+  if (P) {
+    if (P.addListener) P.addListener('fileOpened', handleIncoming);
+    if (cap.Plugins.App) cap.Plugins.App.addListener('appStateChange', (st) => { if (st.isActive) takeIncoming(); });
+    takeIncoming();
+  }
+  setTimeout(startupChecks, 2500);
+  window.__app = { S, showPage, handleIncoming };
 }
 boot().catch((e) => { console.error(e); $('#loading').textContent = 'Gagal memulai: ' + e.message; });

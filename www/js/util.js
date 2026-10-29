@@ -124,10 +124,22 @@ export const readDataURL = (file) => new Promise((res, rej) => {
   const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(file);
 });
 
-function bytesToBase64(bytes) {
+export function bytesToBase64(bytes) {
   let s = ''; const CH = 0x8000;
   for (let i = 0; i < bytes.length; i += CH) s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
   return btoa(s);
+}
+
+export function base64ToBytes(b64) {
+  const bin = atob(b64); const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+// warna hex + alpha -> rgba()
+export function hexA(c, a) {
+  if (a == null || a >= 1 || !/^#[0-9a-f]{6}$/i.test(c || '')) return c;
+  const n = parseInt(c.slice(1), 16);
+  return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${Math.max(0, a)})`;
 }
 
 // Simpan/bagikan file: di Android lewat lembar Share, di browser lewat unduhan

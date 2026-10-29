@@ -38,6 +38,11 @@ function classEditor(t, c, i) {
     h('button', { class: 'btn sec sm', onclick: () => { if (i > 0) { [t.classes[i - 1], t.classes[i]] = [t.classes[i], t.classes[i - 1]]; touch(); rerender(); } } }, '↑'),
     h('button', { class: 'btn sec sm', onclick: () => { if (i < t.classes.length - 1) { [t.classes[i + 1], t.classes[i]] = [t.classes[i], t.classes[i + 1]]; touch(); rerender(); } } }, '↓'));
   wrap.append(r2);
+  const op = c.opacity == null ? 100 : c.opacity;
+  const val = h('span', { class: 'mut small', style: { minWidth: '38px', textAlign: 'right' } }, op + '%');
+  const rg = h('input', { type: 'range', min: 0, max: 100, step: 5, value: op, style: { flex: 1 } });
+  rg.addEventListener('input', () => { c.opacity = +rg.value; val.textContent = rg.value + '%'; touch(); });
+  wrap.append(h('div', { class: 'r2' }, h('span', { class: 'mut small', style: { flex: 'none', minWidth: 0 } }, 'Opasitas'), rg, val));
   return wrap;
 }
 
@@ -80,7 +85,7 @@ function uniqueValues(t) {
   const set = [...new Set(S.ds.rows.map((r) => String(r[k]).trim()).filter((v) => v && v !== '-' && !v.startsWith('#')))].slice(0, 24);
   if (!set.length) { toast('Tidak ada nilai'); return; }
   t.mode = 'category';
-  t.classes = set.map((v, i) => ({ id: uid(), color: PAL[i % PAL.length], label: v, min: null, max: null, values: v, pattern: 'none', pc: '#ff0004' }));
+  t.classes = set.map((v, i) => ({ id: uid(), color: PAL[i % PAL.length], label: v, min: null, max: null, values: v, pattern: 'none', pc: '#ff0004', opacity: 100 }));
   touch(); rerender();
   toast(set.length + ' kelas dibuat dari nilai unik');
 }
@@ -108,7 +113,7 @@ export function renderTheme() {
       try {
         const o = JSON.parse(await readText(f));
         if (!o || !Array.isArray(o.classes)) throw new Error('bukan berkas tema');
-        o.id = 'u' + uid(); o.name = o.name || f.name.replace(/\.json$/i, ''); o.rules = o.rules || defRules(); o.label = o.label || { show: true, sizePx: 10, sizePt: 3, force: false, template: '{BLOK}' };
+        o.id = 'u' + uid(); o.dsId = ''; if (o.opacity == null) o.opacity = 100; o.name = o.name || f.name.replace(/\.json$/i, ''); o.rules = o.rules || defRules(); o.label = o.label || { show: true, sizePx: 10, sizePt: 3, force: false, template: '{BLOK}' };
         S.themes.push(o); S.themeId = o.id; bump('theme'); rerender(); toast('Tema diimpor');
       } catch (e) { toast('Gagal impor tema: ' + e.message, 4000); }
     } }, 'Impor tema'),
@@ -128,16 +133,25 @@ export function renderTheme() {
     row('Nama tema', textInput(t.name, (v) => { t.name = v; touch(); emit('themes'); }, {})),
     row('Judul peta', textArea(t.title, (v) => { t.title = v; touch(); }, { rows: 2, placeholder: 'Baris 1\nBaris 2 (mis. periode)' })),
     row('Judul legenda', textInput(t.legendTitle, (v) => { t.legendTitle = v; touch(); })),
+    row('Sumber CSV', select([['', '(otomatis: CSV aktif)'], ...S.dsList.map((d) => [d.id, d.name])], t.dsId || '', (v) => { t.dsId = v; touch(); rerender(); })),
+    S.dsList.length ? null : h('div', { class: 'mut small' }, 'Belum ada CSV — impor di tab Data.'),
     row('Cara warna', select([['range', 'Rentang angka'], ['category', 'Kategori teks']], t.mode, (v) => { t.mode = v; touch(); rerender(); })),
     row('Kolom data', textInput(t.field, (v) => { t.field = v; touch(); }, { list: 'dl-fields', placeholder: 'Nama kolom CSV' })),
     t.mode === 'range' ? row('Pengali', numInput(t.scale, (v) => { t.scale = v == null ? 1 : v; touch(); }, { placeholder: '1' })) : null,
     t.mode === 'range' ? h('div', { class: 'mut small' }, 'Nilai dikalikan pengali sebelum dicocokkan ke kelas (mis. 100 bila CSV berisi 1,10 untuk 110%).') : null,
-    check(!!t.showCounts, (v) => { t.showCounts = v; touch(); }, 'Tampilkan jumlah blok per kelas di legenda')));
+    check(!!t.showCounts, (v) => { t.showCounts = v; touch(); }, 'Tampilkan jumlah blok per kelas di legenda'),
+    (() => {
+      const op = t.opacity == null ? 100 : t.opacity;
+      const val = h('span', { class: 'mut small', style: { minWidth: '40px', textAlign: 'right' } }, op + '%');
+      const rg = h('input', { type: 'range', min: 0, max: 100, step: 5, value: op, style: { flex: 1 } });
+      rg.addEventListener('input', () => { t.opacity = +rg.value; val.textContent = rg.value + '%'; touch(); });
+      return h('div', {}, row('Opasitas warna', rg, val), h('div', { class: 'mut small' }, '100% = pekat, 50% = transparan sebagian (layer di bawah blok tembus pandang), 0% = hanya garis blok. Opasitas per kelas ada di bagian Kelas warna dan dikalikan dengan ini.'));
+    })()));
 
   const clsKids = [h('div', { class: 'mut small' }, t.mode === 'category' ? 'Kelas cocok bila isi kolom sama dengan salah satu nilai (huruf besar/kecil diabaikan). Tulis * untuk “selain itu”. Urutan menentukan prioritas.' : 'Kelas cocok bila nilai ≥ min dan < maks (kosong = tanpa batas). Angka % dibaca tanpa tanda %. Urutan menentukan prioritas dan urutan legenda.')];
   t.classes.forEach((c, i) => clsKids.push(classEditor(t, c, i)));
   clsKids.push(h('div', { class: 'btns' },
-    h('button', { class: 'btn sec sm', onclick: () => { t.classes.push({ id: uid(), color: PAL[t.classes.length % PAL.length], label: 'Kelas baru', min: null, max: null, values: '', pattern: 'none', pc: '#ff0004' }); touch(); rerender(); } }, '+ Kelas'),
+    h('button', { class: 'btn sec sm', onclick: () => { t.classes.push({ id: uid(), color: PAL[t.classes.length % PAL.length], label: 'Kelas baru', min: null, max: null, values: '', pattern: 'none', pc: '#ff0004', opacity: 100 }); touch(); rerender(); } }, '+ Kelas'),
     h('button', { class: 'btn sec sm', onclick: () => uniqueValues(t) }, 'Buat dari nilai unik'),
     h('button', { class: 'btn sec sm', onclick: () => { t.classes.reverse(); touch(); rerender(); } }, 'Balik urutan')));
   clsKids.push(row('Tanpa data', colorInput(t.noData.fill || '#ffffff', (v) => { t.noData.fill = v; touch(); }), check(!!t.noData.transparent, (v) => { t.noData.transparent = v; touch(); }, 'Kosongkan (tanpa warna)')));

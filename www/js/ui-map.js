@@ -1,7 +1,7 @@
-import { S, theme, onChange, bump, computeStats, getField, labelLines } from './model.js';
+import { S, theme, onChange, bump, computeStats, getField, labelLines, alphaOf } from './model.js';
 import { renderMap, dataBounds, fitView } from './render.js';
-import { hitPolygon } from './geo.js';
-import { $, h, toast, normKey } from './util.js';
+import { hitPolygon, distToFeat } from './geo.js';
+import { $, h, toast, normKey, hexA } from './util.js';
 import { openSheet } from './ui-common.js';
 import { getProp } from './model.js';
 import { makePatternTile } from './render.js';
@@ -56,13 +56,30 @@ const toWorldXY = (px, py) => [(px - view.w / 2) / view.scale + view.cx, (py - v
 function hitTest(px, py) {
   const [x, y] = toWorldXY(px, py);
   const hits = [];
+  let themedHit = false;
   for (let i = S.layers.length - 1; i >= 0; i--) {
     const l = S.layers[i];
     if (!l.visible) continue;
     const rt = S.rt.get(l.id); if (!rt || !rt.feats) continue;
     for (const f of rt.feats) {
-      if (f.polys && hitPolygon(f, x, y)) { hits.push({ layer: l, feat: f }); if (l.themed) break; }
+      if (f.polys && hitPolygon(f, x, y)) { hits.push({ layer: l, feat: f }); if (l.themed) { themedHit = true; break; } }
     }
+  }
+  // ketukan jatuh di garis batas / celah antar blok: ambil blok terdekat dalam ~18 px
+  if (!themedHit) {
+    const tol = 18 / view.scale;
+    let best = null, bd = Infinity;
+    for (let i = S.layers.length - 1; i >= 0; i--) {
+      const l = S.layers[i];
+      if (!l.visible || !l.themed) continue;
+      const rt = S.rt.get(l.id); if (!rt || !rt.feats) continue;
+      for (const f of rt.feats) {
+        if (!f.polys) continue;
+        const d = distToFeat(f, x, y, tol);
+        if (d < bd && d <= tol) { bd = d; best = { layer: l, feat: f }; }
+      }
+    }
+    if (best) hits.unshift(best);
   }
   return hits;
 }
@@ -84,7 +101,7 @@ function showInfo(hits, px, py) {
         else if (s.ci >= 0) cl = th.classes[s.ci].label;
         add('Kelas peta', cl);
       }
-      if (feat._row) { for (const [k, v] of Object.entries(feat._row)) add('CSV · ' + k, v); }
+      if (feat._row) { for (const [k, v] of Object.entries(feat._row)) add((S.ds ? S.ds.name.replace(/\.[^.]+$/, '') : 'CSV') + ' · ' + k, v); }
       else add('Data CSV', S.ds ? 'tidak ada baris untuk blok ini' : 'belum ada CSV diimpor');
     }
     for (const [k, v] of Object.entries(feat.props || {})) add(k, v);
@@ -105,12 +122,12 @@ function renderLegendChip() {
   if (el.dataset.open === '0') return;
   const bd = h('div', { class: 'bd' });
   th.classes.forEach((c, i) => {
-    const sw = h('span', { class: 'sw', style: { background: c.color || 'transparent' } });
+    const sw = h('span', { class: 'sw', style: { background: c.color ? hexA(c.color, alphaOf(th, c)) : 'transparent' } });
     if (c.pattern && c.pattern !== 'none') sw.style.backgroundImage = `url(${makePatternTile(c.pattern, c.pc || '#000', 7).toDataURL()})`;
     bd.append(h('div', { class: 'it' }, sw, h('span', {}, c.label + ' '), h('span', { class: 'mut' }, `(${st.classCounts[i] || 0})`)));
   });
   for (const r of th.rules || []) {
-    if (r.enabled === false || !st.ruleCounts[r.id]) continue;
+    if (r.enabled === false || !r.legendShow || !st.ruleCounts[r.id]) continue;
     const sw = h('span', { class: 'sw', style: { background: r.fill || 'transparent' } });
     if (r.pattern && r.pattern !== 'none') sw.style.backgroundImage = `url(${makePatternTile(r.pattern, r.pc || '#000', 7).toDataURL()})`;
     bd.append(h('div', { class: 'it' }, sw, h('span', {}, (r.legendLabel || 'Aturan') + ' '), h('span', { class: 'mut' }, `(${st.ruleCounts[r.id]})`)));
@@ -175,11 +192,11 @@ export function initMap() {
     if (!pts.has(e.pointerId)) return;
     pts.delete(e.pointerId);
     if (pts.size < 2) pinch = null;
-    if (pts.size === 0 && moved < 8 && Date.now() - t0 < 500 && e.type === 'pointerup') {
+    if (pts.size === 0 && moved < 14 && Date.now() - t0 < 900 && e.type === 'pointerup') {
       const hits = hitTest(e.offsetX, e.offsetY);
       highlight = hits.find((x) => x.layer.themed) ? hits.find((x) => x.layer.themed).feat : null;
       requestDraw();
-      if (hits.length) showInfo(hits, e.offsetX, e.offsetY);
+      if (hits.length) showInfo(hits, e.offsetX, e.offsetY); else toast('Tidak ada blok di titik ini', 1200);
     }
     if (pts.size === 1) { const p = [...pts.values()][0]; last = { x: p.x, y: p.y }; }
   };

@@ -66,9 +66,9 @@ export function renderMap(ctx, v, o) {
       if (f.polys) {
         const path = featPath(f);
         let fill = st.fill, pat = 'none', pc = '#000', alpha = st.fillOpacity == null ? 1 : st.fillOpacity;
-        if (meta.themed && f._style) { fill = f._style.fill; pat = f._style.pattern; pc = f._style.pc; alpha = 1; }
+        if (meta.themed && f._style) { fill = f._style.fill; pat = f._style.pattern; pc = f._style.pc; alpha = f._style.alpha == null ? 1 : f._style.alpha; }
         if (fill) { ctx.fillStyle = fill; withAlpha(ctx, alpha, () => ctx.fill(path, 'evenodd')); }
-        if (pat !== 'none') { ctx.fillStyle = getPattern(ctx, pat, pc || '#000', tile, s); ctx.fill(path, 'evenodd'); }
+        if (pat !== 'none') { ctx.fillStyle = getPattern(ctx, pat, pc || '#000', tile, s); withAlpha(ctx, meta.themed ? alpha : 1, () => ctx.fill(path, 'evenodd')); }
         if (hasStroke) { ctx.lineWidth = lw; ctx.strokeStyle = st.stroke; ctx.setLineDash(dashArr(st.dash, unit / s)); ctx.stroke(path); }
       }
       if (f.lines) {

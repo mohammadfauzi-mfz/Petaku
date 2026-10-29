@@ -254,3 +254,23 @@ export function hitPolygon(feat, x, y) {
   }
   return false;
 }
+
+// jarak (satuan dunia) titik ke tepi poligon terdekat; Infinity bila di luar bbox + maxD
+export function distToFeat(feat, x, y, maxD) {
+  const bb = feat.bbox;
+  if (x < bb[0] - maxD || x > bb[2] + maxD || y < bb[1] - maxD || y > bb[3] + maxD) return Infinity;
+  let best = Infinity;
+  for (const rings of feat.polys || []) {
+    for (const a of rings) {
+      const n = a.length / 2;
+      for (let i = 0, j = n - 1; i < n; j = i++) {
+        const x1 = a[2 * j], y1 = a[2 * j + 1], x2 = a[2 * i], y2 = a[2 * i + 1];
+        const dx = x2 - x1, dy = y2 - y1, l2 = dx * dx + dy * dy;
+        let t = l2 ? ((x - x1) * dx + (y - y1) * dy) / l2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const ex = x1 + t * dx - x, ey = y1 + t * dy - y, d = ex * ex + ey * ey;
+        if (d < best) best = d;
+      }
+    }
+  }
+  return Math.sqrt(best);
+}

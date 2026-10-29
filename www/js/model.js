@@ -8,11 +8,20 @@ export const S = {
   layers: [],        // meta layer, urut dari bawah ke atas
   themes: [],
   themeId: null,
-  ds: null,          // dataset CSV aktif
+  dsList: [],        // semua dataset CSV
+  dsActive: null,    // id dataset yang dipakai tema tanpa pilihan sendiri
+  sync: null,        // pengaturan sinkron & pembaruan (tidak ikut disinkronkan)
   cfg: null,         // pengaturan ekspor
   ver: 0,            // naik setiap ada perubahan yang memengaruhi warna
   rt: new Map(),     // runtime layer: id -> {feats}
 };
+
+// dataset yang dipakai tema aktif (tema.dsId, kalau kosong: dataset aktif)
+export function dsForTheme(t) {
+  if (t && t.dsId) { const d = S.dsList.find((x) => x.id === t.dsId); if (d) return d; }
+  return S.dsList.find((x) => x.id === S.dsActive) || S.dsList[0] || null;
+}
+Object.defineProperty(S, 'ds', { get() { return dsForTheme(S.themes.find((t) => t.id === S.themeId) || S.themes[0]); }, enumerable: false });
 
 const listeners = new Set();
 export const onChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
@@ -27,12 +36,12 @@ export const defRules = () => [
   { id: 'r_kosong', enabled: true, source: 'csv', field: 'Yld', op: 'empty', value: '', fill: '#ffffff', pattern: 'none', pc: '#000000', legendShow: false, legendGroup: '', legendLabel: 'Tanpa data' },
 ];
 
-const C = (color, label, min, max, extra) => ({ id: uid(), color, label, min, max, values: '', pattern: 'none', pc: '#ff0004', ...(extra || {}) });
-const K = (color, label, values) => ({ id: uid(), color, label, min: null, max: null, values, pattern: 'none', pc: '#ff0004' });
+const C = (color, label, min, max, extra) => ({ id: uid(), color, label, min, max, values: '', pattern: 'none', pc: '#ff0004', opacity: 100, ...(extra || {}) });
+const K = (color, label, values) => ({ id: uid(), color, label, min: null, max: null, values, pattern: 'none', pc: '#ff0004', opacity: 100 });
 
 export function defThemes() {
   const base = (o) => ({
-    scale: 1, mode: 'range', noData: { fill: '#ffffff', transparent: false },
+    scale: 1, mode: 'range', dsId: '', opacity: 100, noData: { fill: '#ffffff', transparent: false },
     rules: defRules(), showCounts: false, legendImage: '',
     label: { show: true, sizePx: 10, sizePt: 3.0, force: false }, ...o,
   });
@@ -112,13 +121,17 @@ export function defCfg() {
 // ---------------- persistensi ----------------
 let saveT;
 export function saveSoon() { clearTimeout(saveT); saveT = setTimeout(saveNow, 400); }
+export const slimDs = (d) => ({ id: d.id, name: d.name, headers: d.headers, rows: d.rows, keyCol: d.keyCol, delimiter: d.delimiter, updatedAt: d.updatedAt || 0 });
+export const defSync = () => ({ repo: 'mohammadfauzi-mfz/Petaku', branch: 'main', folder: 'sync', token: '', lastManifest: '', lastPull: 0, scope: { data: true, themes: true, layers: true, cfg: false }, lastUpdateCheck: 0 });
 export async function saveNow() {
   try {
     await dbSet('layers', S.layers.map((l) => Object.fromEntries(Object.entries(l).filter(([k]) => !k.startsWith('_')))));
     await dbSet('themes', S.themes);
     await dbSet('themeId', S.themeId);
     await dbSet('cfg', S.cfg);
-    await dbSet('ds', S.ds ? { name: S.ds.name, headers: S.ds.headers, rows: S.ds.rows, keyCol: S.ds.keyCol, delimiter: S.ds.delimiter } : null);
+    await dbSet('dsList', S.dsList.map(slimDs));
+    await dbSet('dsActive', S.dsActive);
+    await dbSet('sync', S.sync);
   } catch (e) { console.error('simpan gagal', e); }
 }
 
@@ -135,8 +148,17 @@ export async function init() {
   S.themeId = (await dbGet('themeId')) || S.themes[0].id;
   if (!S.themes.some((t) => t.id === S.themeId)) S.themeId = S.themes[0].id;
   S.cfg = { ...defCfg(), ...((await dbGet('cfg')) || {}) };
-  const ds = await dbGet('ds');
-  if (ds && ds.rows) S.ds = buildDs(ds, ds.name, ds.keyCol);
+  S.sync = { ...defSync(), ...((await dbGet('sync')) || {}) };
+  S.sync.scope = { ...defSync().scope, ...(S.sync.scope || {}) };
+  const L2 = await dbGet('dsList');
+  if (Array.isArray(L2)) S.dsList = L2.filter((d) => d && d.rows).map((d) => buildDs(d, d.name, d.keyCol, d.id, d.updatedAt));
+  else {
+    const old = await dbGet('ds');   // migrasi dari versi 1 CSV
+    if (old && old.rows) S.dsList = [buildDs(old, old.name, old.keyCol)];
+  }
+  S.dsActive = (await dbGet('dsActive')) || (S.dsList[0] && S.dsList[0].id) || null;
+  if (!S.dsList.some((d) => d.id === S.dsActive)) S.dsActive = S.dsList[0] ? S.dsList[0].id : null;
+  for (const t of S.themes) { if (t.dsId === undefined) t.dsId = ''; if (t.opacity === undefined) t.opacity = 100; }
   S.ver++;
 }
 
@@ -144,12 +166,24 @@ export const theme = () => S.themes.find((t) => t.id === S.themeId) || S.themes[
 export const layerById = (id) => S.layers.find((l) => l.id === id);
 
 // ---------------- dataset ----------------
-export function buildDs(parsed, name, keyCol) {
+export function buildDs(parsed, name, keyCol, id, updatedAt) {
   const hmap = {};
   parsed.headers.forEach((h) => { hmap[h.toLowerCase().trim()] = h; });
-  const ds = { name, headers: parsed.headers, rows: parsed.rows, delimiter: parsed.delimiter, hmap, keyCol: keyCol || parsed.headers[0], map: new Map() };
+  const ds = { id: id || 'd' + uid(), name, headers: parsed.headers, rows: parsed.rows, delimiter: parsed.delimiter, hmap, keyCol: keyCol || parsed.headers[0], map: new Map(), updatedAt: updatedAt || Date.now() };
   indexDs(ds);
   return ds;
+}
+// tambah dataset; bila nama sama sudah ada -> isinya diganti (id tetap)
+export function putDataset(ds) {
+  const i = S.dsList.findIndex((d) => d.name.toLowerCase() === ds.name.toLowerCase());
+  if (i >= 0) { ds.id = S.dsList[i].id; S.dsList[i] = ds; } else S.dsList.push(ds);
+  S.dsActive = ds.id;
+  return ds;
+}
+export function removeDataset(id) {
+  S.dsList = S.dsList.filter((d) => d.id !== id);
+  for (const t of S.themes) if (t.dsId === id) t.dsId = '';
+  if (S.dsActive === id) S.dsActive = S.dsList[0] ? S.dsList[0].id : null;
 }
 export function indexDs(ds) {
   ds.map = new Map();
@@ -270,6 +304,13 @@ export function matchRule(r, row, props) {
   return false;
 }
 
+// opasitas isi: opasitas tema x opasitas kelas (0..1)
+export function alphaOf(t, c) {
+  const a = (t.opacity == null || t.opacity === '' ? 100 : Number(t.opacity)) / 100;
+  const b = (c && c.opacity != null && c.opacity !== '' ? Number(c.opacity) : 100) / 100;
+  return Math.max(0, Math.min(1, a * b));
+}
+
 export function noDataStyle(t) {
   const nd = t.noData || {};
   return { fill: nd.transparent ? null : (nd.fill || '#ffffff'), pattern: 'none', pc: '#000', ci: -1, rule: null };
@@ -289,7 +330,7 @@ export function resolveStyle(t, row, props) {
     if (!val || val.startsWith('#')) return noDataStyle(t);
     for (let i = 0; i < cls.length; i++) {
       const vs = String(cls[i].values || '').split(/[;,|]/).map((x) => x.trim().toLowerCase()).filter(Boolean);
-      if (vs.includes(val) || vs.includes('*')) return { fill: cls[i].color, pattern: cls[i].pattern || 'none', pc: cls[i].pc, ci: i, rule: null };
+      if (vs.includes(val) || vs.includes('*')) return { fill: cls[i].color, pattern: cls[i].pattern || 'none', pc: cls[i].pc, ci: i, rule: null, alpha: alphaOf(t, cls[i]) };
     }
     return noDataStyle(t);
   }
@@ -299,7 +340,7 @@ export function resolveStyle(t, row, props) {
   for (let i = 0; i < cls.length; i++) {
     const c = cls[i];
     const lo = c.min === null || c.min === '' || c.min === undefined, hi = c.max === null || c.max === '' || c.max === undefined;
-    if ((lo || v >= Number(c.min)) && (hi || v < Number(c.max))) return { fill: c.color, pattern: c.pattern || 'none', pc: c.pc, ci: i, rule: null };
+    if ((lo || v >= Number(c.min)) && (hi || v < Number(c.max))) return { fill: c.color, pattern: c.pattern || 'none', pc: c.pc, ci: i, rule: null, alpha: alphaOf(t, c) };
   }
   return noDataStyle(t);
 }

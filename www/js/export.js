@@ -1,5 +1,5 @@
 // Layout halaman peta: peta + panel kanan (judul, legenda, skala, indeks) -> kanvas -> PNG/JPG/PDF
-import { S, theme, computeStats } from './model.js';
+import { S, theme, computeStats, alphaOf } from './model.js';
 import { renderMap, dataBounds, fitView, makePatternTile } from './render.js';
 import { M_PER_UNIT } from './geo.js';
 
@@ -91,10 +91,12 @@ function drawSwatch(ctx, row, x, y, w, h, unit) {
   if (row.kind === 'class' || row.kind === 'rule') {
     const o = row.kind === 'class' ? row.cls : row.rule;
     const fill = row.kind === 'class' ? o.color : o.fill;
-    if (fill) { ctx.fillStyle = fill; ctx.fillRect(x, y, w, h); }
+    const al = row.kind === 'class' ? alphaOf(theme(), o) : 1;
+    ctx.fillStyle = '#fff'; ctx.fillRect(x, y, w, h);
+    if (fill) { ctx.globalAlpha = al; ctx.fillStyle = fill; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1; }
     if (o.pattern && o.pattern !== 'none') {
       const pat = ctx.createPattern(makePatternTile(o.pattern, o.pc || '#000', 4.5 * unit), 'repeat');
-      ctx.fillStyle = pat; ctx.fillRect(x, y, w, h);
+      ctx.globalAlpha = al; ctx.fillStyle = pat; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1;
     }
     ctx.strokeStyle = '#000'; ctx.strokeRect(x, y, w, h);
   } else {

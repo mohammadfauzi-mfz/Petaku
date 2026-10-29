@@ -1,6 +1,6 @@
 {
-  "appId": "id.bpn.petasbi",
-  "appName": "Peta SBI",
+  "appId": "id.bpn.petaku",
+  "appName": "Petaku",
   "webDir": "www",
   "android": {
     "allowMixedContent": false

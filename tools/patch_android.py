@@ -1,0 +1,56 @@
+"""Dijalankan oleh GitHub Actions setelah `npx cap add android`:
+ - menambah intent-filter (buka CSV/GeoJSON/KML dari WhatsApp & pengelola berkas)
+ - izin pasang APK untuk fitur pembaruan
+ - memasang plugin native Petaku + MainActivity
+ - memastikan FileProvider bisa membaca folder cache."""
+import json, os, re, sys
+
+root = sys.argv[1] if len(sys.argv) > 1 else '.'
+cfg = json.load(open(os.path.join(root, 'capacitor.config.json')))
+pkg = cfg['appId']
+base = os.path.join(root, 'android', 'app', 'src', 'main')
+
+mf = os.path.join(base, 'AndroidManifest.xml')
+x = open(mf, encoding='utf-8').read()
+MIMES = ['text/csv', 'text/comma-separated-values', 'text/tab-separated-values', 'application/csv', 'text/plain',
+         'application/vnd.ms-excel', 'application/octet-stream', 'application/json', 'application/geo+json',
+         'application/vnd.google-earth.kml+xml']
+mime_xml = '\n'.join(f'                <data android:mimeType="{m}" />' for m in MIMES)
+filters = f'''
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+{mime_xml}
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+{mime_xml}
+            </intent-filter>
+'''
+if 'android.intent.action.SEND' not in x:
+    i = x.index('</activity>')
+    x = x[:i] + filters + '        ' + x[i:]
+if 'REQUEST_INSTALL_PACKAGES' not in x:
+    x = x.replace('</manifest>', '    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n</manifest>')
+open(mf, 'w', encoding='utf-8').write(x)
+
+jdir = os.path.join(base, 'java', *pkg.split('.'))
+os.makedirs(jdir, exist_ok=True)
+for f in ('MainActivity.java', 'PetakuPlugin.java'):
+    src = open(os.path.join(root, 'android-patch', f), encoding='utf-8').read()
+    src = re.sub(r'^package\s+[\w.]+;', f'package {pkg};', src, count=1, flags=re.M)
+    open(os.path.join(jdir, f), 'w', encoding='utf-8').write(src)
+
+xmldir = os.path.join(base, 'res', 'xml')
+os.makedirs(xmldir, exist_ok=True)
+open(os.path.join(xmldir, 'file_paths.xml'), 'w').write('''<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="my_images" path="." />
+    <cache-path name="my_cache_images" path="." />
+    <files-path name="my_files" path="." />
+</paths>
+''')
+print('patch OK untuk', pkg)
