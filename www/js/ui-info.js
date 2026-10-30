@@ -18,6 +18,76 @@ function classInfo(th, s) {
   return { label: 'Tanpa data', color: '#e5ebe8' };
 }
 
+// ---------- data bulanan ----------
+const MON = { jan: 1, feb: 2, mar: 3, apr: 4, mei: 5, may: 5, jun: 6, jul: 7, agu: 8, agt: 8, aug: 8, ags: 8, sep: 9, okt: 10, oct: 10, nov: 11, des: 12, dec: 12 };
+const MLAB = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+const MNAME = '(jan(?:uari|uary)?|feb(?:ruari|ruary)?|mar(?:et|ch)?|apr(?:il)?|mei|may|jun(?:i|e)?|jul(?:i|y)?|agu(?:stus)?|agt|aug(?:ust)?|ags|sep(?:t|tember)?|okt(?:ober)?|oct(?:ober)?|nov(?:ember)?|des(?:ember)?|dec(?:ember)?)';
+const SEP = '[\\s_\\-./]*';
+const RE_NAME = new RegExp('^(.*?)' + SEP + MNAME + SEP + '(\\d{2}|\\d{4})?$', 'i');       // BJR Jan, BJR Jan 25, BJR_Januari_2025
+const RE_YM = new RegExp('^(.*?)' + SEP + '(20\\d{2})' + SEP + '(0?[1-9]|1[0-2])$');            // BJR 2025-01, BJR_2025_1
+const RE_MY = new RegExp('^(.*?)' + SEP + '(0?[1-9]|1[0-2])' + SEP + '(20\\d{2})$');            // BJR 01-2025
+const yy = (y) => (y == null ? '' : String(y).length === 2 ? '20' + y : String(y));
+
+function parseMonthCol(c) {
+  const t = String(c).trim();
+  let m = t.match(RE_YM); if (m) return { base: m[1].trim(), year: m[2], mon: +m[3] };
+  m = t.match(RE_MY); if (m) return { base: m[1].trim(), year: m[3], mon: +m[2] };
+  m = t.match(RE_NAME);
+  if (m) { const k = MON[m[2].slice(0, 3).toLowerCase()]; if (k) return { base: m[1].trim(), year: yy(m[3]), mon: k }; }
+  return null;
+}
+// pisahkan kolom bulanan: Map(base -> Map(year -> {mon: kolom}))
+function splitMonthly(cols) {
+  const bases = new Map(), consumed = new Set();
+  for (const c of cols) {
+    const p = parseMonthCol(c); if (!p) continue;
+    if (!bases.has(p.base)) bases.set(p.base, new Map());
+    const yrs = bases.get(p.base); if (!yrs.has(p.year)) yrs.set(p.year, {});
+    yrs.get(p.year)[p.mon] = c; 
+  }
+  // angka 01..12 polos: "BJR 01".."BJR 12" (minimal 6 bulan berbeda, semuanya <= 12)
+  const plain = new Map();
+  for (const c of cols) { const m = String(c).trim().match(/^(.*?)[\s_\-.]*(0?[1-9]|1[0-2])$/); if (m && /^0?\d+$/.test(m[2]) && (m[2].length === 2 || m[1].trim() !== '')) { const b = m[1].trim(); if (!plain.has(b)) plain.set(b, []); plain.get(b).push({ c, mon: +m[2], raw: m[2] }); } }
+  for (const [b, items] of plain) {
+    const allTwo = items.every((x) => x.raw.length === 2);
+    const distinct = new Set(items.map((x) => x.mon)).size;
+    if (allTwo && items.length >= 6 && distinct === items.length && !bases.has(b)) { const mm = {}; for (const x of items) mm[x.mon] = x.c; bases.set(b, new Map([['', mm]])); }
+  }
+  const out = [];
+  for (const [base, yrs] of bases) {
+    const n = [...yrs.values()].reduce((a, mm) => a + Object.keys(mm).length, 0);
+    if (n < 2) continue;
+    for (const mm of yrs.values()) for (const c of Object.values(mm)) consumed.add(c);
+    out.push({ base, yrs: [...yrs.entries()].sort((x, y) => x[0].localeCompare(y[0])) });
+  }
+  return { monthly: out, consumed };
+}
+function fmtV(v) { const a = Math.abs(v); return a >= 100 ? String(Math.round(v)) : a >= 10 ? (Math.round(v * 10) / 10).toString() : (Math.round(v * 100) / 100).toString(); }
+
+function monthChart(yrs, row, max) {
+  const wrap = h('div', {});
+  const many = yrs.length > 2;
+  yrs.forEach(([year, mm], yi) => {
+    const vals = []; for (let m = 1; m <= 12; m++) { const c = mm[m]; const raw = c ? getField(row, c) : null; vals.push(c && !HIDE_EMPTY(raw) ? num(raw) : null); }
+    const nums = vals.filter((v) => v != null);
+    if (!nums.length) return;
+    const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+    const chart = h('div', { class: 'mchart' });
+    const H = 64;
+    chart.append(h('div', { class: 'avgline', style: { bottom: (14 + Math.max(0, avg) / max * H) + 'px' } }));
+    vals.forEach((v, i) => {
+      chart.append(h('div', { class: 'mcol' + (v == null ? ' empty' : '') },
+        h('span', { class: 'mv' }, v == null ? '' : fmtV(v)),
+        h('i', { style: { height: v == null ? '2px' : Math.max(2, Math.abs(v) / max * H) + 'px' } }),
+        h('span', { class: 'ml' }, MLAB[i])));
+    });
+    const cap = `${year || 'Per bulan'} · rata-rata ${fmtV(avg)} · ${nums.length} bulan`;
+    if (yrs.length === 1) { wrap.append(h('div', { class: 'mcap' }, cap), chart); }
+    else wrap.append(h('details', { class: 'ic-sub', open: !many || yi === yrs.length - 1 }, h('summary', {}, cap), chart));
+  });
+  return wrap.childNodes.length ? wrap : null;
+}
+
 // kelompokkan kolom berakhiran angka/tahun: "Yld 25", "Pupuk 21" -> grup "Yld", "Pupuk"
 function groupColumns(cols) {
   const groups = new Map(), rest = [];
@@ -108,7 +178,15 @@ export function buildBlockCard(layer, feat) {
 
     // detail
     const others = S.ds.headers.filter((c) => !used.has(c) && !HIDE_EMPTY(row[c]));
-    const { grouped, rest } = groupColumns(S.ds.headers.filter((c) => !used.has(c)));
+    const avail = S.ds.headers.filter((c) => !used.has(c));
+    const { monthly, consumed } = splitMonthly(avail);
+    for (const g of monthly) {
+      let max = 1e-9;
+      for (const [, mm] of g.yrs) for (const c of Object.values(mm)) { const v = num(getField(row, c)); if (v != null && Math.abs(v) > max) max = Math.abs(v); }
+      const ch = monthChart(g.yrs, row, max);
+      if (ch) card.append(h('details', { class: 'ic-sec', open: true }, h('summary', {}, g.base || 'Bulanan', h('small', {}, ' per bulan')), ch));
+    }
+    const { grouped, rest } = groupColumns(avail.filter((c) => !consumed.has(c)));
     for (const g of grouped) {
       const b = bars(g.items, row);
       if (!b) continue;
