@@ -35,7 +35,8 @@ jobs:
       - name: Generate Android project
         run: |
           npx cap add android
-          python3 tools/patch_android.py .
+          test -f keystore/debug.keystore || { echo "::error::Folder keystore/ belum ada di repo. Upload keystore/debug.keystore lalu jalankan lagi."; exit 1; }
+          RUN_NUMBER=${{ github.run_number }} python3 tools/patch_android.py .
           npx cap sync android
 
       - name: Pakai keystore tetap (APK baru bisa menimpa APK lama)
@@ -49,6 +50,13 @@ jobs:
 
       - name: Siapkan APK
         run: cp android/app/build/outputs/apk/debug/app-debug.apk Petaku.apk
+
+      - name: Sidik jari tanda tangan (harus sama di setiap build)
+        run: |
+          echo "Keystore repo:"; keytool -list -v -keystore keystore/debug.keystore -storepass android | grep "SHA256"
+          echo "APK:"; keytool -printcert -jarfile Petaku.apk | grep "SHA256"
+          echo "### Sidik jari (SHA-256) APK" >> $GITHUB_STEP_SUMMARY
+          keytool -printcert -jarfile Petaku.apk | grep "SHA256" >> $GITHUB_STEP_SUMMARY
 
       - uses: actions/upload-artifact@v4
         with:
