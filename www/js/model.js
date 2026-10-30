@@ -316,9 +316,21 @@ export function noDataStyle(t) {
   return { fill: nd.transparent ? null : (nd.fill || '#ffffff'), pattern: 'none', pc: '#000', ci: -1, rule: null };
 }
 
+// aturan mode "overlay": arsiran di atas warna kelas tema (warna tema tetap)
 export function resolveStyle(t, row, props) {
+  const base = resolveBase(t, row, props);
+  if (base.rule) return base;
+  let ov = null;
   for (const r of t.rules || []) {
-    if (r.enabled === false) continue;
+    if (r.enabled === false || r.mode !== 'overlay') continue;
+    if (matchRule(r, row, props)) { (ov = ov || []).push({ pattern: r.pattern || 'diag', pc: r.pc || '#000000', alpha: alphaOf(t, r), rule: r.id }); }
+  }
+  if (ov) base.over = ov;
+  return base;
+}
+function resolveBase(t, row, props) {
+  for (const r of t.rules || []) {
+    if (r.enabled === false || r.mode === 'overlay') continue;
     if (matchRule(r, row, props)) return { fill: r.noFill ? null : r.fill, pattern: r.pattern || 'none', pc: r.pc, ci: -1, rule: r.id, alpha: alphaOf(t, r) };
   }
   if (!row) return noDataStyle(t);
@@ -377,6 +389,7 @@ export function computeStats() {
       st.polys++;
       const s = f._style;
       if (f._row) { st.matchedPolys++; st.rowsUsed.add(f._row); } else if (!s.rule) st.polysNoRow.push(String(getProp(f.props, l.keyField)));
+      if (s.over) for (const o of s.over) st.ruleCounts[o.rule] = (st.ruleCounts[o.rule] || 0) + 1;
       if (s.rule) st.ruleCounts[s.rule] = (st.ruleCounts[s.rule] || 0) + 1;
       else if (s.ci >= 0) st.classCounts[s.ci]++;
       else st.nodata++;

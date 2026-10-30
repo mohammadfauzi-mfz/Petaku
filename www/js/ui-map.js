@@ -224,7 +224,7 @@ function renderLegendChip() {
   });
   for (const r of th.rules || []) {
     if (r.enabled === false || !r.legendShow || !st.ruleCounts[r.id]) continue;
-    const sw = h('span', { class: 'sw', style: { background: r.fill && !r.noFill ? hexA(r.fill, alphaOf(th, r)) : 'transparent' } });
+    const sw = h('span', { class: 'sw', style: { background: r.fill && !r.noFill && r.mode !== 'overlay' ? hexA(r.fill, alphaOf(th, r)) : 'transparent' } });
     if (r.pattern && r.pattern !== 'none') sw.style.backgroundImage = `url(${makePatternTile(r.pattern, r.pc || '#000', 7).toDataURL()})`;
     bd.append(h('div', { class: 'it' }, sw, h('span', {}, (r.legendLabel || 'Aturan') + ' '), h('span', { class: 'mut' }, `(${st.ruleCounts[r.id]})`)));
   }

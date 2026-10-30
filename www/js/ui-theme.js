@@ -57,12 +57,18 @@ function ruleEditor(t, r, i) {
     select(OPS, r.op, (v) => { r.op = v; touch(); rerender(); }),
     (r.op === 'empty' || r.op === 'notempty') ? h('span', { class: 'mut' }, '(tanpa nilai)') : textInput(r.value, (v) => { r.value = v; touch(); }, { placeholder: 'Nilai / regex' }));
   wrap.append(r2);
-  wrap.append(h('div', { class: 'r2' },
+  wrap.append(h('div', { class: 'r2' }, h('span', { class: 'mut small', style: { flex: 'none', minWidth: 0 } }, 'Cara'),
+    select([['replace', 'Ganti warna blok'], ['overlay', 'Arsiran di atas warna tema']], r.mode === 'overlay' ? 'overlay' : 'replace', (v) => { r.mode = v; if (v === 'overlay' && (!r.pattern || r.pattern === 'none')) r.pattern = 'diag'; touch(); rerender(); })));
+  if (r.mode === 'overlay') {
+    wrap.append(h('div', { class: 'mut small' }, 'Warna blok tetap mengikuti kelas tema; hanya arsiran ini yang ditambahkan.'));
+    wrap.append(h('div', { class: 'r2' }, h('span', { class: 'mut small', style: { flex: 'none', minWidth: 0 } }, 'Arsiran'),
+      patternSel(r.pattern, (v) => { r.pattern = v; touch(); }), colorInput(r.pc || '#000000', (v) => { r.pc = v; touch(); })));
+  } else wrap.append(h('div', { class: 'r2' },
     h('span', { class: 'mut', style: { flex: 'none', minWidth: 0 } }, 'Isi'),
     colorInput(r.fill || '#ffffff', (v) => { r.fill = v; touch(); }),
     patternSel(r.pattern, (v) => { r.pattern = v; touch(); }),
     colorInput(r.pc || '#00a01e', (v) => { r.pc = v; touch(); })));
-  wrap.append(h('div', { class: 'r2' }, check(!!r.noFill, (v) => { r.noFill = v; touch(); }, 'Tanpa warna isi (transparan penuh; arsiran tetap tampil)')));
+  if (r.mode !== 'overlay') wrap.append(h('div', { class: 'r2' }, check(!!r.noFill, (v) => { r.noFill = v; touch(); }, 'Tanpa warna isi (transparan penuh; arsiran tetap tampil)')));
   const rop = r.opacity == null ? 100 : r.opacity;
   const rval = h('span', { class: 'mut small', style: { minWidth: '38px', textAlign: 'right' } }, rop + '%');
   const rrg = h('input', { type: 'range', min: 0, max: 100, step: 5, value: rop, style: { flex: 1 } });

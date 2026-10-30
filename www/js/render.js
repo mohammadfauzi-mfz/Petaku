@@ -69,6 +69,7 @@ export function renderMap(ctx, v, o) {
         if (meta.themed && f._style) { fill = f._style.fill; pat = f._style.pattern; pc = f._style.pc; alpha = f._style.alpha == null ? 1 : f._style.alpha; }
         if (fill) { ctx.fillStyle = fill; withAlpha(ctx, alpha, () => ctx.fill(path, 'evenodd')); }
         if (pat !== 'none') { ctx.fillStyle = getPattern(ctx, pat, pc || '#000', tile, s); withAlpha(ctx, meta.themed ? alpha : 1, () => ctx.fill(path, 'evenodd')); }
+        if (meta.themed && f._style && f._style.over) for (const o of f._style.over) { ctx.fillStyle = getPattern(ctx, o.pattern, o.pc, tile, s); withAlpha(ctx, o.alpha, () => ctx.fill(path, 'evenodd')); }
         if (hasStroke) { ctx.lineWidth = lw; ctx.strokeStyle = st.stroke; ctx.setLineDash(dashArr(st.dash, unit / s)); ctx.stroke(path); }
       }
       if (f.lines) {
