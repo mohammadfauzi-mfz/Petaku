@@ -81,3 +81,25 @@ if os.path.isdir(icons):
         p = os.path.join(res, d, 'ic_launcher_foreground.xml')
         if os.path.exists(p): os.remove(p)
     print('ikon peta terpasang')
+
+# ---- penandatanganan tetap + versionCode naik tiap build ----
+gr = os.path.join(root, 'android', 'app', 'build.gradle')
+if os.path.exists(gr):
+    g = open(gr, encoding='utf-8').read()
+    run = os.environ.get('RUN_NUMBER', '1')
+    g = re.sub(r'versionCode\s+\d+', f'versionCode {run}', g, count=1)
+    g = re.sub(r'versionName\s+"[^"]*"', f'versionName "1.0.{run}"', g, count=1)
+    ks = os.path.abspath(os.path.join(root, 'keystore', 'debug.keystore')).replace('\\', '/')
+    block = f'''    signingConfigs {{
+        debug {{
+            storeFile file("{ks}")
+            storePassword "android"
+            keyAlias "androiddebugkey"
+            keyPassword "android"
+        }}
+    }}
+'''
+    if 'keystore/debug.keystore' not in g:
+        g = re.sub(r'(\n\s*buildTypes\s*\{)', '\n' + block + r'\1', g, count=1)
+    open(gr, 'w', encoding='utf-8').write(g)
+    print('build.gradle: versionCode', run, '+ keystore tetap')
