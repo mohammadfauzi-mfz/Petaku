@@ -62,6 +62,12 @@ function ruleEditor(t, r, i) {
     colorInput(r.fill || '#ffffff', (v) => { r.fill = v; touch(); }),
     patternSel(r.pattern, (v) => { r.pattern = v; touch(); }),
     colorInput(r.pc || '#00a01e', (v) => { r.pc = v; touch(); })));
+  wrap.append(h('div', { class: 'r2' }, check(!!r.noFill, (v) => { r.noFill = v; touch(); }, 'Tanpa warna isi (transparan penuh; arsiran tetap tampil)')));
+  const rop = r.opacity == null ? 100 : r.opacity;
+  const rval = h('span', { class: 'mut small', style: { minWidth: '38px', textAlign: 'right' } }, rop + '%');
+  const rrg = h('input', { type: 'range', min: 0, max: 100, step: 5, value: rop, style: { flex: 1 } });
+  rrg.addEventListener('input', () => { r.opacity = +rrg.value; rval.textContent = rrg.value + '%'; touch(); });
+  wrap.append(h('div', { class: 'r2' }, h('span', { class: 'mut small', style: { flex: 'none', minWidth: 0 } }, 'Opasitas'), rrg, rval));
   wrap.append(h('div', { class: 'r2' },
     check(!!r.legendShow, (v) => { r.legendShow = v; touch(); }, 'Legenda'),
     textInput(r.legendGroup, (v) => { r.legendGroup = v; touch(); }, { placeholder: 'Grup' }),

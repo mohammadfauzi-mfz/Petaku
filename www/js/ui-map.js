@@ -1,6 +1,6 @@
 import { S, theme, onChange, bump, computeStats, getField, labelLines, alphaOf } from './model.js';
 import { renderMap, dataBounds, fitView } from './render.js';
-import { hitPolygon, distToFeat } from './geo.js';
+import { hitPolygon, distToFeat, toWorld, M_PER_UNIT } from './geo.js';
 import { $, h, toast, normKey, hexA } from './util.js';
 import { openSheet } from './ui-common.js';
 import { getProp } from './model.js';
@@ -43,6 +43,102 @@ function draw() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, view.w, view.h);
   try { renderMap(ctx, view, { unit: 1, ptPx: 1, screen: true, highlight }); } catch (e) { console.error(e); }
+  drawGps();
+}
+
+// ---------------- lokasi saya (GPS) ----------------
+const gps = { on: false, id: null, pos: null, sheetClose: null };
+function drawGps() {
+  if (!gps.on || !gps.pos) return;
+  const [wx, wy] = toWorld(gps.pos.lon, gps.pos.lat);
+  const sx = (wx - view.cx) * view.scale + view.w / 2, sy = (wy - view.cy) * view.scale + view.h / 2;
+  const r = Math.max(8, (gps.pos.acc || 0) / M_PER_UNIT * view.scale);
+  ctx.save();
+  ctx.beginPath(); ctx.arc(sx, sy, r, 0, 7); ctx.fillStyle = 'rgba(30,136,229,.16)'; ctx.fill();
+  ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(30,136,229,.55)'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(sx, sy, 8, 0, 7); ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.beginPath(); ctx.arc(sx, sy, 5.5, 0, 7); ctx.fillStyle = '#1e88e5'; ctx.fill();
+  ctx.restore();
+}
+function gpsCenter(first) {
+  if (!gps.pos) return;
+  const [wx, wy] = toWorld(gps.pos.lon, gps.pos.lat);
+  view.cx = wx; view.cy = wy;
+  const want = view.w / (700 / M_PER_UNIT);      // lebar layar ~700 m
+  if (first || view.scale < want * 0.25) view.scale = Math.max(view.scale, want);
+  requestDraw();
+}
+function gpsStop() {
+  if (gps.id != null && navigator.geolocation) navigator.geolocation.clearWatch(gps.id);
+  gps.on = false; gps.id = null; gps.pos = null;
+  $('#bGps').classList.remove('on'); requestDraw();
+}
+function gpsStart() {
+  if (!navigator.geolocation) { toast('GPS tidak tersedia di perangkat ini', 3500); return; }
+  gps.on = true; $('#bGps').classList.add('on');
+  toast('Mencari lokasi…', 2500);
+  let first = true;
+  gps.id = navigator.geolocation.watchPosition((p) => {
+    gps.pos = { lon: p.coords.longitude, lat: p.coords.latitude, acc: p.coords.accuracy, t: p.timestamp };
+    if (first) { first = false; gpsCenter(true); } else requestDraw();
+    if (gps.refresh) gps.refresh();
+  }, (err) => {
+    const m = { 1: 'Izin lokasi ditolak — aktifkan izin lokasi untuk Petaku di pengaturan HP', 2: 'Lokasi tidak tersedia (cek GPS aktif)', 3: 'Waktu mencari lokasi habis, coba di tempat terbuka' }[err.code] || 'Gagal mendapat lokasi';
+    toast(m, 5000);
+    if (err.code === 1) gpsStop();
+  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 25000 });
+}
+function blockAt(lon, lat) {
+  const [x, y] = toWorld(lon, lat);
+  for (let i = S.layers.length - 1; i >= 0; i--) {
+    const l = S.layers[i];
+    if (!l.visible || !l.themed) continue;
+    const rt = S.rt.get(l.id); if (!rt || !rt.feats) continue;
+    for (const f of rt.feats) if (f.polys && hitPolygon(f, x, y)) return { layer: l, feat: f };
+  }
+  return null;
+}
+function gpsSheet() {
+  const body = h('div', {});
+  const out = h('div', {});
+  const render = () => {
+    out.innerHTML = '';
+    const p = gps.pos;
+    if (!p) { out.append(h('div', { class: 'mut' }, 'Menunggu sinyal GPS…')); return; }
+    const txt = `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}`;
+    const kv = h('div', { class: 'kv' });
+    const add = (k, v) => kv.append(h('b', {}, k), h('span', {}, v == null || v === '' ? '–' : String(v)));
+    add('Koordinat (lat, lon)', txt);
+    add('Akurasi', '± ' + Math.round(p.acc) + ' m');
+    const hit = blockAt(p.lon, p.lat);
+    if (hit) {
+      const th = theme();
+      add('Blok', getProp(hit.feat.props, hit.layer.keyField));
+      if (hit.feat._style) {
+        const s = hit.feat._style; let cl = 'Tanpa data';
+        if (s.rule) { const r = (th.rules || []).find((x) => x.id === s.rule); cl = r ? (r.legendLabel || 'Aturan khusus') : 'Aturan khusus'; } else if (s.ci >= 0) cl = th.classes[s.ci].label;
+        add('Kelas peta', cl);
+      }
+      if (hit.feat._row) for (const [k, v] of Object.entries(hit.feat._row)) add(k, v);
+      for (const k of ['Estate', 'Afdeling']) if (hit.feat.props && hit.feat.props[k] != null) add(k, hit.feat.props[k]);
+    } else add('Blok', 'di luar blok yang dimuat');
+    out.append(kv, h('div', { class: 'btns' },
+      h('button', { class: 'btn', onclick: () => { copyText(txt); } }, 'Salin koordinat'),
+      h('a', { class: 'btn sec', href: `https://www.google.com/maps?q=${txt.replace(' ', '')}`, target: '_blank', rel: 'noopener', style: { textDecoration: 'none' } }, 'Buka di Maps')));
+  };
+  body.append(out, h('div', { class: 'btns' },
+    h('button', { class: 'btn sec', onclick: () => { gpsCenter(false); } }, 'Pusatkan peta'),
+    h('button', { class: 'btn red', onclick: () => { gpsStop(); close(); } }, 'Matikan GPS')));
+  gps.refresh = render; render();
+  const close = openSheet('Lokasi saya', body, { onClose: () => { gps.refresh = null; } });
+}
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); toast('Koordinat disalin'); }
+  catch (e) {
+    const ta = h('textarea', { style: { position: 'fixed', opacity: 0 } }); ta.value = t; document.body.append(ta); ta.select();
+    try { document.execCommand('copy'); toast('Koordinat disalin'); } catch (e2) { toast(t, 5000); }
+    ta.remove();
+  }
 }
 
 function zoomAt(px, py, k) {
@@ -128,7 +224,7 @@ function renderLegendChip() {
   });
   for (const r of th.rules || []) {
     if (r.enabled === false || !r.legendShow || !st.ruleCounts[r.id]) continue;
-    const sw = h('span', { class: 'sw', style: { background: r.fill || 'transparent' } });
+    const sw = h('span', { class: 'sw', style: { background: r.fill && !r.noFill ? hexA(r.fill, alphaOf(th, r)) : 'transparent' } });
     if (r.pattern && r.pattern !== 'none') sw.style.backgroundImage = `url(${makePatternTile(r.pattern, r.pc || '#000', 7).toDataURL()})`;
     bd.append(h('div', { class: 'it' }, sw, h('span', {}, (r.legendLabel || 'Aturan') + ' '), h('span', { class: 'mut' }, `(${st.ruleCounts[r.id]})`)));
   }
@@ -207,6 +303,7 @@ export function initMap() {
   $('#bZi').onclick = () => zoomAt(view.w / 2, view.h / 2, 1.6);
   $('#bZo').onclick = () => zoomAt(view.w / 2, view.h / 2, 1 / 1.6);
   $('#bFind').onclick = findBlock;
+  $('#bGps').onclick = () => { if (!gps.on) gpsStart(); else gpsSheet(); };
   const lb = $('#bLbl');
   const syncLbl = () => lb.classList.toggle('on', theme().label.show !== false);
   lb.onclick = () => { const t = theme(); t.label.show = t.label.show === false; syncLbl(); bump('style'); };

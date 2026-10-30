@@ -90,8 +90,8 @@ function drawSwatch(ctx, row, x, y, w, h, unit) {
   ctx.lineWidth = 0.7 * unit;
   if (row.kind === 'class' || row.kind === 'rule') {
     const o = row.kind === 'class' ? row.cls : row.rule;
-    const fill = row.kind === 'class' ? o.color : o.fill;
-    const al = row.kind === 'class' ? alphaOf(theme(), o) : 1;
+    const fill = row.kind === 'class' ? o.color : (o.noFill ? null : o.fill);
+    const al = alphaOf(theme(), o);
     ctx.fillStyle = '#fff'; ctx.fillRect(x, y, w, h);
     if (fill) { ctx.globalAlpha = al; ctx.fillStyle = fill; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1; }
     if (o.pattern && o.pattern !== 'none') {

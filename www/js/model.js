@@ -319,7 +319,7 @@ export function noDataStyle(t) {
 export function resolveStyle(t, row, props) {
   for (const r of t.rules || []) {
     if (r.enabled === false) continue;
-    if (matchRule(r, row, props)) return { fill: r.fill, pattern: r.pattern || 'none', pc: r.pc, ci: -1, rule: r.id };
+    if (matchRule(r, row, props)) return { fill: r.noFill ? null : r.fill, pattern: r.pattern || 'none', pc: r.pc, ci: -1, rule: r.id, alpha: alphaOf(t, r) };
   }
   if (!row) return noDataStyle(t);
   const raw = getField(row, t.field);

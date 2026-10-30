@@ -33,6 +33,8 @@ filters = f'''
 if 'android.intent.action.SEND' not in x:
     i = x.index('</activity>')
     x = x[:i] + filters + '        ' + x[i:]
+if 'ACCESS_FINE_LOCATION' not in x:
+    x = x.replace('</manifest>', '    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n</manifest>')
 if 'REQUEST_INSTALL_PACKAGES' not in x:
     x = x.replace('</manifest>', '    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n</manifest>')
 open(mf, 'w', encoding='utf-8').write(x)
@@ -54,3 +56,28 @@ open(os.path.join(xmldir, 'file_paths.xml'), 'w').write('''<?xml version="1.0" e
 </paths>
 ''')
 print('patch OK untuk', pkg)
+
+# ---- ikon aplikasi (peta) ----
+import shutil
+icons = os.path.join(root, 'android-patch', 'icons')
+res = os.path.join(base, 'res')
+if os.path.isdir(icons):
+    for d in os.listdir(icons):
+        src = os.path.join(icons, d)
+        if os.path.isdir(src) and d.startswith('mipmap-'):
+            dst = os.path.join(res, d); os.makedirs(dst, exist_ok=True)
+            for f in os.listdir(src):
+                shutil.copy(os.path.join(src, f), os.path.join(dst, f))
+    vdir = os.path.join(res, 'values'); os.makedirs(vdir, exist_ok=True)
+    open(os.path.join(vdir, 'ic_launcher_background.xml'), 'w').write('<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#0B5D3B</color>\n</resources>\n')
+    # pastikan ikon adaptif memakai foreground PNG yang baru
+    any26 = os.path.join(res, 'mipmap-anydpi-v26')
+    os.makedirs(any26, exist_ok=True)
+    adaptive = '<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n    <background android:drawable="@color/ic_launcher_background"/>\n    <foreground android:drawable="@mipmap/ic_launcher_foreground"/>\n</adaptive-icon>\n'
+    for n in ('ic_launcher.xml', 'ic_launcher_round.xml'):
+        open(os.path.join(any26, n), 'w').write(adaptive)
+    # hapus foreground vektor bawaan Capacitor bila ada
+    for d in ('drawable-v24', 'drawable'):
+        p = os.path.join(res, d, 'ic_launcher_foreground.xml')
+        if os.path.exists(p): os.remove(p)
+    print('ikon peta terpasang')
