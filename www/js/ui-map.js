@@ -3,6 +3,7 @@ import { renderMap, dataBounds, fitView } from './render.js';
 import { hitPolygon, distToFeat, toWorld, M_PER_UNIT } from './geo.js';
 import { $, h, toast, normKey, hexA } from './util.js';
 import { openSheet } from './ui-common.js';
+import { buildBlockCard } from './ui-info.js';
 import { getProp } from './model.js';
 import { makePatternTile } from './render.js';
 
@@ -182,24 +183,13 @@ function hitTest(px, py) {
 
 function showInfo(hits, px, py) {
   const body = h('div', {});
-  const th = theme();
-  hits.forEach((hit, idx) => {
+  hits.forEach((hit) => {
     const { layer, feat } = hit;
+    if (layer.themed) { body.append(buildBlockCard(layer, feat)); return; }
     const card = h('div', { class: 'card' });
-    card.append(h('h3', {}, layer.themed ? (getProp(feat.props, layer.keyField) || layer.name) : layer.name));
+    card.append(h('h3', {}, layer.name));
     const kv = h('div', { class: 'kv' });
     const add = (k, v) => { kv.append(h('b', {}, k), h('span', {}, v == null || v === '' ? '–' : String(v))); };
-    if (layer.themed) {
-      const s = feat._style;
-      if (s) {
-        let cl = 'Tanpa data';
-        if (s.rule) { const r = (th.rules || []).find((x) => x.id === s.rule); cl = r ? (r.legendLabel || 'Aturan khusus') : 'Aturan khusus'; }
-        else if (s.ci >= 0) cl = th.classes[s.ci].label;
-        add('Kelas peta', cl);
-      }
-      if (feat._row) { for (const [k, v] of Object.entries(feat._row)) add((S.ds ? S.ds.name.replace(/\.[^.]+$/, '') : 'CSV') + ' · ' + k, v); }
-      else add('Data CSV', S.ds ? 'tidak ada baris untuk blok ini' : 'belum ada CSV diimpor');
-    }
     for (const [k, v] of Object.entries(feat.props || {})) add(k, v);
     card.append(kv);
     body.append(card);

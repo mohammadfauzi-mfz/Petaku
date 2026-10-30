@@ -87,3 +87,31 @@ canvas.prev{width:100%;border:1px solid var(--line);border-radius:8px;background
 .small{font-size:12px}
 .hint{background:#fff8e1;border:1px solid #f1d98a;border-radius:8px;padding:7px 9px;font-size:13px;margin:8px 0}
 
+/* kartu info blok */
+.ic{background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px;box-shadow:0 1px 3px #0001}
+.ic-hd{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ic-code{font-size:30px;font-weight:800;letter-spacing:.5px;line-height:1;color:var(--g)}
+.ic-badges{display:flex;gap:6px;flex-wrap:wrap}
+.bdg{background:#e5ebe8;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:600}
+.bdg.dark{background:var(--g);color:#fff}
+.ic-class{margin-top:10px;border-radius:12px;padding:9px 12px;display:flex;flex-direction:column;border:1px solid #0002}
+.ic-class small{opacity:.8;font-size:11.5px}
+.ic-class b{font-size:18px}
+.ic-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));gap:8px;margin-top:10px}
+.mt{background:#f3f6f4;border-radius:10px;padding:7px 10px;display:flex;flex-direction:column;border:1px solid var(--line)}
+.mt small{font-size:11px;opacity:.75}
+.mt b{font-size:19px;line-height:1.2}
+.mt.hl{border:1px solid #0003}
+.ic-sec{margin-top:10px;border-top:1px solid var(--line);padding-top:6px}
+.ic-sec summary{cursor:pointer;font-weight:700;font-size:13.5px;padding:3px 0}
+.ic-sec summary small{font-weight:400;color:var(--mut)}
+.bars{display:flex;flex-direction:column;gap:5px;margin-top:6px}
+.bar{display:grid;grid-template-columns:34px 1fr 74px;gap:8px;align-items:center;font-size:12.5px}
+.bar .bl{color:var(--mut)}
+.bar .bt{background:#e9eeeb;border-radius:6px;height:12px;overflow:hidden;display:block}
+.bar .bt i{display:block;height:100%;background:linear-gradient(90deg,var(--g2),#4fc08d);border-radius:6px}
+.bar .bv{text-align:right;font-variant-numeric:tabular-nums}
+.ic-none{margin-top:10px;color:var(--mut);font-size:13px}
+.ic-src{margin-top:8px;font-size:11.5px;color:var(--mut);word-break:break-all}
+.ic-act{display:flex;gap:8px;margin-top:10px}
+a.btn{display:inline-flex;align-items:center;color:var(--tx)}
