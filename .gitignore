@@ -1,0 +1,4 @@
+node_modules/
+android/
+tools/__pycache__/
+*.apk

@@ -65,28 +65,49 @@ function splitMonthly(cols) {
 }
 function fmtV(v) { const a = Math.abs(v); return a >= 100 ? String(Math.round(v)) : a >= 10 ? (Math.round(v * 10) / 10).toString() : (Math.round(v * 100) / 100).toString(); }
 
-function monthChart(yrs, row, max) {
-  const wrap = h('div', {});
-  const many = yrs.length > 2;
-  yrs.forEach(([year, mm], yi) => {
+const YCOL = ['#9fb3c8', '#f2a541', '#8e7cc3', '#0b8f5a'];  // tahun tertua -> terbaru (terbaru selalu hijau)
+function monthChart(yrs, row) {
+  // kumpulkan nilai per tahun
+  let sets = [];
+  for (const [year, mm] of yrs) {
     const vals = []; for (let m = 1; m <= 12; m++) { const c = mm[m]; const raw = c ? getField(row, c) : null; vals.push(c && !HIDE_EMPTY(raw) ? num(raw) : null); }
     const nums = vals.filter((v) => v != null);
-    if (!nums.length) return;
-    const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
-    const chart = h('div', { class: 'mchart' });
-    const H = 64;
-    chart.append(h('div', { class: 'avgline', style: { bottom: (14 + Math.max(0, avg) / max * H) + 'px' } }));
-    vals.forEach((v, i) => {
-      chart.append(h('div', { class: 'mcol' + (v == null ? ' empty' : '') },
-        h('span', { class: 'mv' }, v == null ? '' : fmtV(v)),
-        h('i', { style: { height: v == null ? '2px' : Math.max(2, Math.abs(v) / max * H) + 'px' } }),
-        h('span', { class: 'ml' }, MLAB[i])));
-    });
-    const cap = `${year || 'Per bulan'} · rata-rata ${fmtV(avg)} · ${nums.length} bulan`;
-    if (yrs.length === 1) { wrap.append(h('div', { class: 'mcap' }, cap), chart); }
-    else wrap.append(h('details', { class: 'ic-sub', open: !many || yi === yrs.length - 1 }, h('summary', {}, cap), chart));
-  });
-  return wrap.childNodes.length ? wrap : null;
+    if (nums.length) sets.push({ year: year || '', vals, nums, avg: nums.reduce((a, b) => a + b, 0) / nums.length });
+  }
+  if (!sets.length) return null;
+  const cut = sets.length > 4 ? sets.length - 4 : 0;
+  sets = sets.slice(cut);
+  const n = sets.length;
+  sets.forEach((x, i) => { x.color = YCOL[YCOL.length - n + i]; });
+  // skala: tidak mulai dari 0 supaya naik-turun terlihat jelas
+  const all = sets.flatMap((x) => x.nums);
+  const mx = Math.max(...all), mn = Math.min(...all), span = mx - mn;
+  const lo = span > 0 ? mn - span * 0.35 : mn * 0.9, hi = span > 0 ? mx : mx * 1.05 || 1;
+  const H = 74, Y = (v) => Math.max(3, (v - lo) / (hi - lo) * H);
+  const wrap = h('div', {});
+  // legenda tahun
+  const leg = h('div', { class: 'mleg' });
+  for (const x of sets) leg.append(h('span', { class: 'mly' }, h('i', { style: { background: x.color } }), (x.year || 'Data') + ' ', h('em', {}, `rata-rata ${fmtV(x.avg)} · ${x.nums.length} bln`)));
+  wrap.append(leg);
+  const chart = h('div', { class: 'mchart grp' });
+  for (const x of sets) chart.append(h('div', { class: 'avgline', style: { bottom: (14 + Y(x.avg)) + 'px', borderTopColor: x.color } }));
+  const last = sets[n - 1];
+  for (let i = 0; i < 12; i++) {
+    const col = h('div', { class: 'mgrp' });
+    const bars = h('div', { class: 'mbars' });
+    for (const x of sets) {
+      const v = x.vals[i];
+      const showLbl = n === 1 || x === last;
+      bars.append(h('div', { class: 'mb' },
+        h('span', { class: 'mv' }, v != null && showLbl ? fmtV(v) : ''),
+        h('i', { style: { height: v == null ? '2px' : Y(v) + 'px', background: v == null ? '#d9dedb' : x.color } })));
+    }
+    col.append(bars, h('span', { class: 'ml' }, MLAB[i]));
+    chart.append(col);
+  }
+  wrap.append(chart);
+  wrap.append(h('div', { class: 'mut small' }, `Sumbu tidak mulai dari 0 (${fmtV(lo)} – ${fmtV(hi)}) agar perubahan terlihat jelas.` + (n > 1 ? ' Angka di atas batang = tahun terbaru. Garis putus = rata-rata.' : '') + (cut ? ` Hanya ${n} tahun terbaru ditampilkan.` : '')));
+  return wrap;
 }
 
 // kelompokkan kolom berakhiran angka/tahun: "Yld 25", "Pupuk 21" -> grup "Yld", "Pupuk"
@@ -182,9 +203,7 @@ export function buildBlockCard(layer, feat) {
     const avail = S.ds.headers.filter((c) => !used.has(c));
     const { monthly, consumed } = splitMonthly(avail);
     for (const g of monthly) {
-      let max = 1e-9;
-      for (const [, mm] of g.yrs) for (const c of Object.values(mm)) { const v = num(getField(row, c)); if (v != null && Math.abs(v) > max) max = Math.abs(v); }
-      const ch = monthChart(g.yrs, row, max);
+      const ch = monthChart(g.yrs, row);
       if (ch) card.append(h('details', { class: 'ic-sec', open: true }, h('summary', {}, g.base || 'Bulanan', h('small', {}, ' per bulan')), ch));
     }
     const { grouped, rest } = groupColumns(avail.filter((c) => !consumed.has(c)));
