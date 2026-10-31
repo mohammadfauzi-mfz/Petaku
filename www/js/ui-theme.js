@@ -5,7 +5,7 @@ import { confirmBox, textInput, numInput, colorInput, textArea, check, row } fro
 
 const openKeys = new Set(['dasar', 'kelas']);
 const PAL = ['#1f77b4', '#2ca02c', '#ff7f0e', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#7f7f7f', '#00c6f7', '#ffd30b'];
-const OPS = [['equals', 'sama dengan'], ['notequals', 'tidak sama dengan'], ['contains', 'mengandung'], ['startsWith', 'diawali'], ['endsWith', 'diakhiri'], ['regex', 'cocok regex'], ['empty', 'kosong / “-” / error'], ['notempty', 'terisi'], ['gt', '> (angka)'], ['gte', '≥ (angka)'], ['lt', '< (angka)'], ['lte', '≤ (angka)']];
+export const OPS = [['equals', 'sama dengan'], ['notequals', 'tidak sama dengan'], ['contains', 'mengandung'], ['startsWith', 'diawali'], ['endsWith', 'diakhiri'], ['regex', 'cocok regex'], ['empty', 'kosong / “-” / error'], ['notempty', 'terisi'], ['gt', '> (angka)'], ['gte', '≥ (angka)'], ['lt', '< (angka)'], ['lte', '≤ (angka)']];
 
 function rerender() { const el = $('#p-theme'); const y = el.scrollTop; renderTheme(); el.scrollTop = y; }
 const touch = () => bump('style');

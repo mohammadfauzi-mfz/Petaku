@@ -1,5 +1,5 @@
 // Layout halaman peta: peta + panel kanan (judul, legenda, skala, indeks) -> kanvas -> PNG/JPG/PDF
-import { S, theme, computeStats, alphaOf } from './model.js';
+import { S, theme, computeStats, alphaOf, filterNote } from './model.js';
 import { renderMap, dataBounds, fitView, makePatternTile } from './render.js';
 import { M_PER_UNIT } from './geo.js';
 
@@ -175,6 +175,7 @@ export async function renderPage(cfg, opts) {
   // judul
   const titleH = Hi * (portrait ? 0.07 : 0.095);
   const titleLines = String(th.title || '').split('\n').filter(Boolean);
+  { const fn = filterNote(th); if (fn) titleLines.push(fn); }
   box(y, titleH);
   if (titleLines.length) {
     const px = fitLines(ctx, titleLines, P.w * 0.9, titleH * 0.82, 'bold', titleH * 0.3);

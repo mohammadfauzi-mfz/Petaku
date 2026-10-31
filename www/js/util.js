@@ -163,3 +163,26 @@ export async function shareFile(name, bytesOrString, mime, title) {
   setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   return true;
 }
+
+// Bagikan beberapa berkas sekaligus: Android -> satu lembar Share berisi semua; browser -> unduh berurutan
+export async function shareFiles(list, title) {
+  const cap = window.Capacitor;
+  if (cap && cap.isNativePlatform && cap.isNativePlatform() && cap.Plugins && cap.Plugins.Filesystem && cap.Plugins.Share) {
+    try {
+      const uris = [];
+      for (const f of list) {
+        const bytes = typeof f.data === 'string' ? new TextEncoder().encode(f.data) : f.data;
+        const r = await cap.Plugins.Filesystem.writeFile({ path: f.name, data: bytesToBase64(bytes), directory: 'CACHE', recursive: true });
+        uris.push(r.uri);
+      }
+      await cap.Plugins.Share.share({ title: title || 'Berkas', files: uris, dialogTitle: title || 'Berkas' });
+      return true;
+    } catch (e) {
+      if (String(e && e.message || e).toLowerCase().includes('cancel')) return false;
+      toast('Gagal membagikan: ' + (e.message || e), 4000);
+      return false;
+    }
+  }
+  for (const f of list) { await shareFile(f.name, f.data, f.mime || 'application/octet-stream', title); await new Promise((r) => setTimeout(r, 350)); }
+  return true;
+}

@@ -3,6 +3,7 @@ import { renderPage, buildFile, PAPERS } from './export.js';
 import { h, $, toast, select, pickFile, readDataURL, shareFile } from './util.js';
 import { row, textInput, textArea, check } from './ui-common.js';
 import { getView } from './ui-map.js';
+import { filterCard } from './ui-filter.js';
 
 let prevTimer = 0, busy = false;
 function cfgChanged() { saveSoon(); clearTimeout(prevTimer); prevTimer = setTimeout(drawPreview, 350); }
@@ -33,6 +34,7 @@ export function renderExport() {
   const pv = h('div', { class: 'card' }, h('h3', {}, 'Pratinjau hasil'), h('canvas', { class: 'prev', id: 'expPrev' }));
   el.append(pv);
 
+  el.append(filterCard());
   const go = h('div', { class: 'card' }, h('h3', {}, 'Simpan / bagikan'));
   go.append(row('Format', select([['pdf', 'PDF'], ['png', 'PNG'], ['jpg', 'JPG']], cfg.format, (v) => { cfg.format = v; saveSoon(); })));
   const btn = h('button', { class: 'btn block', onclick: async () => {

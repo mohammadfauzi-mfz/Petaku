@@ -1,4 +1,5 @@
-import { S, theme, onChange, bump, computeStats, getField, labelLines, alphaOf } from './model.js';
+import { S, theme, onChange, bump, computeStats, getField, labelLines, alphaOf, filterActive, filterHides } from './model.js';
+import { openFilter } from './ui-filter.js';
 import { renderMap, dataBounds, fitView } from './render.js';
 import { hitPolygon, distToFeat, toWorld, M_PER_UNIT } from './geo.js';
 import { $, h, toast, normKey, hexA } from './util.js';
@@ -154,11 +155,13 @@ function hitTest(px, py) {
   const [x, y] = toWorldXY(px, py);
   const hits = [];
   let themedHit = false;
+  const FH = filterHides();
   for (let i = S.layers.length - 1; i >= 0; i--) {
     const l = S.layers[i];
     if (!l.visible) continue;
     const rt = S.rt.get(l.id); if (!rt || !rt.feats) continue;
     for (const f of rt.feats) {
+      if (FH && f._pass === false) continue;
       if (f.polys && hitPolygon(f, x, y)) { hits.push({ layer: l, feat: f }); if (l.themed) { themedHit = true; break; } }
     }
   }
@@ -171,7 +174,7 @@ function hitTest(px, py) {
       if (!l.visible || !l.themed) continue;
       const rt = S.rt.get(l.id); if (!rt || !rt.feats) continue;
       for (const f of rt.feats) {
-        if (!f.polys) continue;
+        if (!f.polys || (FH && f._pass === false)) continue;
         const d = distToFeat(f, x, y, tol);
         if (d < bd && d <= tol) { bd = d; best = { layer: l, feat: f }; }
       }
@@ -224,9 +227,10 @@ function renderLegendChip() {
 
 function renderStatus() {
   const el = $('#mapStatus');
+  const fb = $('#bFilter'); if (fb) fb.classList.toggle('on', filterActive());
   if (!S.ds) { el.textContent = 'CSV belum diimpor → tab Data'; return; }
   const st = computeStats();
-  el.textContent = `${S.ds.name} · ${st.matchedPolys}/${S.ds.map.size} baris cocok`;
+  el.textContent = `${S.ds.name} · ${st.matchedPolys}/${S.ds.map.size} baris cocok` + (filterActive() ? ` · filter: ${st.pass || 0}/${st.total || 0} blok` : '');
 }
 
 function findBlock() {
@@ -293,6 +297,7 @@ export function initMap() {
   $('#bZi').onclick = () => zoomAt(view.w / 2, view.h / 2, 1.6);
   $('#bZo').onclick = () => zoomAt(view.w / 2, view.h / 2, 1 / 1.6);
   $('#bFind').onclick = findBlock;
+  $('#bFilter').onclick = () => openFilter();
   $('#bGps').onclick = () => { if (!gps.on) gpsStart(); else gpsSheet(); };
   const lb = $('#bLbl');
   const syncLbl = () => lb.classList.toggle('on', theme().label.show !== false);

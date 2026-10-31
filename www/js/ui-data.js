@@ -1,6 +1,6 @@
 import { S, bump, buildDs, indexDs, autoKeyCol, computeStats, theme, loadLayer, putDataset, removeDataset, dsForTheme } from './model.js';
 import { parseCSV } from './geo.js';
-import { h, $, toast, pickFile, readText, select, uid } from './util.js';
+import { h, $, toast, pickFile, readText, select, uid, shareFile, shareFiles } from './util.js';
 import { openSheet, check, confirmBox, textInput } from './ui-common.js';
 
 // Impor satu berkas CSV sebagai dataset. Nama sama -> isi dataset lama diganti.
@@ -43,6 +43,35 @@ function previewSheet(ds) {
   openSheet(`${ds.name} (30 baris pertama)`, h('div', { class: 'tblwrap' }, tb));
 }
 
+const DELIMS = [['orig', 'Sama seperti aslinya'], [';', 'Titik koma ( ; ) — Excel Indonesia'], [',', 'Koma ( , )'], ['\t', 'Tab']];
+function csvQuote(v, d) {
+  const s = v == null ? '' : String(v);
+  return (s.includes(d) || /["\r\n]/.test(s)) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+export function dsToCSV(ds, delim, bom) {
+  const d = !delim || delim === 'orig' ? (ds.delimiter || ';') : delim;
+  const lines = [ds.headers.map((x) => csvQuote(x, d)).join(d)];
+  for (const r of ds.rows) lines.push(ds.headers.map((x) => csvQuote(r[x], d)).join(d));
+  return (bom ? '\ufeff' : '') + lines.join('\r\n') + '\r\n';
+}
+const csvName = (ds) => { const n = String(ds.name || 'data').replace(/[\\/:*?"<>|]+/g, '_').trim() || 'data'; return /\.(csv|txt|tsv)$/i.test(n) ? n.replace(/\.(txt|tsv)$/i, '.csv') : n + '.csv'; };
+
+function shareSheet(list) {
+  let delim = 'orig', bom = true;
+  const many = list.length > 1;
+  const body = h('div', {},
+    h('div', { class: 'mut' }, many ? `${list.length} CSV akan dibagikan sekaligus.` : `${list[0].name} · ${list[0].rows.length} baris`),
+    h('div', { class: 'row' }, h('label', {}, 'Pemisah'), h('div', { class: 'grow' }, select(DELIMS, delim, (v) => { delim = v; }))),
+    h('div', { style: { margin: '8px 0' } }, check(true, (v) => { bom = v; }, 'Sertakan penanda UTF-8 (agar dibuka rapi di Excel)')),
+    h('div', { class: 'mut small' }, 'Di Android akan muncul lembar bagikan — pilih WhatsApp lalu kontak/grup tujuan. Penerima dapat membuka CSV langsung ke Petaku.'),
+    h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: async () => {
+      const files = list.map((d) => ({ name: csvName(d), data: dsToCSV(d, delim, bom), mime: 'text/csv' }));
+      const ok = many ? await shareFiles(files, 'Data CSV Petaku') : await shareFile(files[0].name, files[0].data, 'text/csv', files[0].name);
+      if (ok) { toast('CSV siap dibagikan'); close(); }
+    } }, 'Bagikan')));
+  const close = openSheet(many ? 'Bagikan semua CSV' : 'Bagikan CSV', body, { center: true });
+}
+
 function usedBy(ds) {
   return S.themes.filter((t) => (dsForTheme(t) || {}).id === ds.id).map((t) => t.name);
 }
@@ -66,6 +95,7 @@ export function renderData() {
         h('div', { class: 'nm', style: { wordBreak: 'break-all' } }, d.name),
         h('div', { class: 'mut small' }, `${d.rows.length} baris · ${d.headers.length} kolom` + (by.length ? ' · dipakai: ' + by.join(', ') : ' · belum dipakai tema'))),
       h('button', { class: 'btn sec sm', onclick: () => previewSheet(d) }, 'Lihat'),
+      h('button', { class: 'btn sec sm', onclick: () => shareSheet([d]) }, 'Bagikan'),
       h('button', { class: 'btn sec sm', onclick: () => {
         const inp = textInput(d.name, () => {});
         const close = openSheet('Ganti nama CSV', h('div', {}, inp, h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => { const v = inp.value.trim(); if (v) { d.name = v; bump('data'); renderData(); } close(); } }, 'Simpan'))), { center: true });
@@ -73,6 +103,7 @@ export function renderData() {
       h('button', { class: 'btn red sm', onclick: async () => { if (!await confirmBox(`Hapus CSV "${d.name}"?`, 'Hapus')) return; removeDataset(d.id); bump('data'); renderData(); } }, 'Hapus'));
     list.append(item);
   }
+  if (S.dsList.length > 1) list.append(h('div', { class: 'btns' }, h('button', { class: 'btn sec sm', onclick: () => shareSheet(S.dsList.slice()) }, 'Bagikan semua')));
   list.append(h('div', { class: 'mut small' }, 'Disorot = CSV yang dipakai tema aktif (“' + theme().name + '”).'));
   el.append(list);
 

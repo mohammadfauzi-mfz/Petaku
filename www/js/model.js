@@ -357,6 +357,80 @@ function resolveBase(t, row, props) {
   return noDataStyle(t);
 }
 
+// ---------------- filter peta (per tema) ----------------
+const lcs = (v) => String(v == null ? '' : v).trim().toLowerCase();
+export const filterActive = (t) => { t = t || theme(); const f = t && t.filter; return !!f && !!((f.estates && f.estates.length) || (f.afds && f.afds.length) || (f.conds && f.conds.length)); };
+export const filterHides = (t) => { t = t || theme(); return filterActive(t) && (t.filter.mode || 'hide') === 'hide'; };
+export const filterDims = (t) => { t = t || theme(); return filterActive(t) && t.filter.mode === 'dim'; };
+const fctx = { v: -1, t: '', c: null };
+function filterCtx() {
+  if (fctx.v === S.ver && fctx.t === S.themeId && fctx.c) return fctx.c;
+  const f = theme().filter || {};
+  const est = new Set((f.estates || []).map(lcs)), afd = new Set((f.afds || []).map(lcs));
+  const afdEst = new Map();
+  for (const l of S.layers) {
+    if (!l.themed) continue;
+    const rt = S.rt.get(l.id); if (!rt || !rt.feats) continue;
+    for (const x of rt.feats) {
+      const e = lcs(getProp(x.props, 'Estate')), a = lcs(getProp(x.props, 'Afdeling'));
+      if (!a) continue;
+      if (!afdEst.has(a)) afdEst.set(a, new Set());
+      afdEst.get(a).add(e);
+    }
+  }
+  const eff = new Set(est);
+  for (const a of afd) for (const e of afdEst.get(a) || []) eff.add(e);
+  fctx.v = S.ver; fctx.t = S.themeId; fctx.c = { est, afd, eff, afdEst, conds: (f.conds || []).filter((c) => c && c.field) };
+  return fctx.c;
+}
+function estAfdOk(c, props) {
+  if (c.est.size && !c.est.has(lcs(getProp(props, 'Estate')))) return false;
+  if (c.afd.size && !c.afd.has(lcs(getProp(props, 'Afdeling')))) return false;
+  return true;
+}
+// true bila fitur lolos filter tema aktif
+export function featPass(meta, f) {
+  if (!filterActive()) return true;
+  const c = filterCtx();
+  if (meta.themed) {
+    if (!estAfdOk(c, f.props)) return false;
+    for (const q of c.conds) if (!matchRule(q, f._row, f.props)) return false;
+    return true;
+  }
+  switch (meta.id) {
+    case 'rendahan': return estAfdOk(c, f.props);
+    case 'batas_estate': return !c.eff.size || c.eff.has(lcs(getProp(f.props, 'Estate')));
+    case 'label_estate': return !c.eff.size || c.eff.has(lcs(getProp(f.props, 'Nama')));
+    case 'batas_afdeling': case 'label_afdeling': {
+      const a = lcs(getProp(f.props, meta.id === 'label_afdeling' ? 'Nama' : 'Afdeling'));
+      if (c.afd.size) return c.afd.has(a);
+      if (c.est.size) { for (const e of c.afdEst.get(a) || []) if (c.est.has(e)) return true; return false; }
+      return true;
+    }
+  }
+  return true;
+}
+// lapisan non-tema: hitung bendera _pass (lapisan bertema dihitung di ensureStyles)
+export function ensurePass(meta, feats) {
+  if (meta._fv === S.ver && meta._ft === S.themeId) return;
+  const on = filterActive();
+  for (const f of feats) f._pass = on ? featPass(meta, f) : true;
+  meta._fv = S.ver; meta._ft = S.themeId;
+}
+export function filterNote(t) {
+  t = t || theme();
+  if (!filterActive(t) || !t.filter.titleNote) return '';
+  const f = t.filter, parts = [];
+  if (f.estates && f.estates.length) parts.push('Estate: ' + f.estates.join(', '));
+  if (f.afds && f.afds.length) parts.push('Afdeling: ' + f.afds.join(', '));
+  const OPN = { equals: '=', notequals: '≠', contains: 'mengandung', startsWith: 'diawali', endsWith: 'diakhiri', regex: '~', empty: 'kosong', notempty: 'terisi', gt: '>', gte: '≥', lt: '<', lte: '≤' };
+  for (const q of f.conds || []) if (q && q.field) parts.push(`${q.field} ${OPN[q.op] || q.op}${q.op === 'empty' || q.op === 'notempty' ? '' : ' ' + q.value}`);
+  return parts.join(' · ');
+}
+export function filterSummary(t) {
+  return filterNote(Object.assign({}, t || theme(), { filter: Object.assign({}, (t || theme()).filter, { titleNote: true }) }));
+}
+
 export function ensureStyles(meta, feats) {
   if (meta._sv === S.ver && meta._st === S.themeId) return;
   const t = theme();
@@ -372,6 +446,8 @@ export function ensureStyles(meta, feats) {
     f._row = row;
     f._style = resolveStyle(t, row, f.props);
   }
+  const on = filterActive(t);
+  for (const f of feats) f._pass = on ? featPass(meta, f) : true;
   meta._sv = S.ver; meta._st = S.themeId;
 }
 
@@ -386,9 +462,13 @@ export function computeStats() {
     ensureStyles(l, rt.feats);
     for (const f of rt.feats) {
       if (!f.polys) continue;
+      if (f._row) st.rowsUsed.add(f._row);
+      st.total = (st.total || 0) + 1;
+      if (f._pass === false) continue;
+      st.pass = (st.pass || 0) + 1;
       st.polys++;
       const s = f._style;
-      if (f._row) { st.matchedPolys++; st.rowsUsed.add(f._row); } else if (!s.rule) st.polysNoRow.push(String(getProp(f.props, l.keyField)));
+      if (f._row) { st.matchedPolys++; } else if (!s.rule) st.polysNoRow.push(String(getProp(f.props, l.keyField)));
       if (s.over) for (const o of s.over) st.ruleCounts[o.rule] = (st.ruleCounts[o.rule] || 0) + 1;
       if (s.rule) st.ruleCounts[s.rule] = (st.ruleCounts[s.rule] || 0) + 1;
       else if (s.ci >= 0) st.classCounts[s.ci]++;

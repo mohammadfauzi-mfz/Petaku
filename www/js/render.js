@@ -1,5 +1,5 @@
 // Penggambar peta (dipakai layar dan ekspor)
-import { S, theme, ensureStyles, labelLines, getProp } from './model.js';
+import { S, theme, ensureStyles, ensurePass, filterActive, filterHides, filterDims, labelLines, getProp } from './model.js';
 import { featPath, linePath, labelAnchor } from './geo.js';
 
 const patCache = new Map();
@@ -49,6 +49,7 @@ export function renderMap(ctx, v, o) {
   const x0 = v.cx - v.w / 2 / s, x1 = v.cx + v.w / 2 / s, y0 = v.cy - v.h / 2 / s, y1 = v.cy + v.h / 2 / s;
   const th = theme();
   const tile = 4.5 * unit;
+  const FH = filterHides(th), FD = filterDims(th);
   ctx.save();
   ctx.translate(tx, ty); ctx.scale(s, s);
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
@@ -57,19 +58,22 @@ export function renderMap(ctx, v, o) {
     const rt = S.rt.get(meta.id);
     if (!rt || !rt.feats) continue;
     const st = meta.style || {};
-    if (meta.themed) ensureStyles(meta, rt.feats);
+    if (meta.themed) ensureStyles(meta, rt.feats); else ensurePass(meta, rt.feats);
     const lw = (st.strokeWidth == null ? 0.5 : st.strokeWidth) * unit / s;
     const hasStroke = st.stroke && lw > 0;
     for (const f of rt.feats) {
       const b = f.bbox;
       if (b[2] < x0 || b[0] > x1 || b[3] < y0 || b[1] > y1) continue;
+      if (FH && f._pass === false) continue;
+      const dim = FD && meta.themed && f._pass === false;
       if (f.polys) {
         const path = featPath(f);
         let fill = st.fill, pat = 'none', pc = '#000', alpha = st.fillOpacity == null ? 1 : st.fillOpacity;
         if (meta.themed && f._style) { fill = f._style.fill; pat = f._style.pattern; pc = f._style.pc; alpha = f._style.alpha == null ? 1 : f._style.alpha; }
+        if (dim) { fill = '#e3e3e3'; pat = 'none'; alpha = 1; }
         if (fill) { ctx.fillStyle = fill; withAlpha(ctx, alpha, () => ctx.fill(path, 'evenodd')); }
         if (pat !== 'none') { ctx.fillStyle = getPattern(ctx, pat, pc || '#000', tile, s); withAlpha(ctx, meta.themed ? alpha : 1, () => ctx.fill(path, 'evenodd')); }
-        if (meta.themed && f._style && f._style.over) for (const o of f._style.over) { ctx.fillStyle = getPattern(ctx, o.pattern, o.pc, tile, s); withAlpha(ctx, o.alpha, () => ctx.fill(path, 'evenodd')); }
+        if (!dim && meta.themed && f._style && f._style.over) for (const o of f._style.over) { ctx.fillStyle = getPattern(ctx, o.pattern, o.pc, tile, s); withAlpha(ctx, o.alpha, () => ctx.fill(path, 'evenodd')); }
         if (hasStroke) { ctx.lineWidth = lw; ctx.strokeStyle = st.stroke; ctx.setLineDash(dashArr(st.dash, unit / s)); ctx.stroke(path); }
       }
       if (f.lines) {
@@ -115,6 +119,7 @@ export function renderMap(ctx, v, o) {
       for (const f of rt.feats) {
         if (!f.polys) continue;
         if (!f._row && !L.unmatched) continue;
+        if (f._pass === false) continue;
         const b = f.bbox;
         if (b[2] < x0 || b[0] > x1 || b[3] < y0 || b[1] > y1) continue;
         if (!L.force && (b[2] - b[0]) * s < fpx * 1.3) continue;
@@ -138,6 +143,7 @@ export function renderMap(ctx, v, o) {
       for (const f of rt.feats) {
         const b = f.bbox;
         if (b[2] < x0 || b[0] > x1 || b[3] < y0 || b[1] > y1) continue;
+        if (FH && f._pass === false) continue;
         const val = getProp(f.props, st.labelField);
         if (val == null || String(val).trim() === '') continue;
         let ax, ay;
@@ -156,12 +162,19 @@ export function renderMap(ctx, v, o) {
 // batas gabungan: layer bertema bila ada, kalau tidak semua layer terlihat
 export function dataBounds() {
   const b = [Infinity, Infinity, -Infinity, -Infinity];
+  const add = (k) => { if (k[0] < b[0]) b[0] = k[0]; if (k[1] < b[1]) b[1] = k[1]; if (k[2] > b[2]) b[2] = k[2]; if (k[3] > b[3]) b[3] = k[3]; };
+  const fa = filterActive();
   const pick = (themedOnly) => {
     for (const l of S.layers) {
       if (!l.visible || (themedOnly && !l.themed)) continue;
       const rt = S.rt.get(l.id); if (!rt || !rt.bbox) continue;
-      const k = rt.bbox;
-      if (k[0] < b[0]) b[0] = k[0]; if (k[1] < b[1]) b[1] = k[1]; if (k[2] > b[2]) b[2] = k[2]; if (k[3] > b[3]) b[3] = k[3];
+      if (fa && l.themed && rt.feats) {
+        ensureStyles(l, rt.feats);
+        let any = false;
+        for (const f of rt.feats) if (f.polys && f._pass !== false) { add(f.bbox); any = true; }
+        if (any) continue;
+      }
+      add(rt.bbox);
     }
   };
   pick(true);
