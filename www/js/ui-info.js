@@ -47,7 +47,8 @@ function splitMonthly(cols) {
   }
   // angka 01..12 polos: "BJR 01".."BJR 12" (minimal 6 bulan berbeda, semuanya <= 12)
   const plain = new Map();
-  for (const c of cols) { const m = String(c).trim().match(/^(.*?)[\s_\-.]*(0?[1-9]|1[0-2])$/); if (m && /^0?\d+$/.test(m[2]) && (m[2].length === 2 || m[1].trim() !== '')) { const b = m[1].trim(); if (!plain.has(b)) plain.set(b, []); plain.get(b).push({ c, mon: +m[2], raw: m[2] }); } }
+  const taken = new Set(); for (const yrs of bases.values()) for (const mm of yrs.values()) for (const c of Object.values(mm)) taken.add(c);
+  for (const c of cols) { if (taken.has(c)) continue; const m = String(c).trim().match(/^(.*?)[\s_\-.]*(0?[1-9]|1[0-2])$/); if (m && /^0?\d+$/.test(m[2]) && (m[2].length === 2 || m[1].trim() !== '')) { const b = m[1].trim(); if (!plain.has(b)) plain.set(b, []); plain.get(b).push({ c, mon: +m[2], raw: m[2] }); } }
   for (const [b, items] of plain) {
     const allTwo = items.every((x) => x.raw.length === 2);
     const distinct = new Set(items.map((x) => x.mon)).size;
