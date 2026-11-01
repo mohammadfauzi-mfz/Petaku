@@ -1,5 +1,6 @@
 import { S, theme, onChange, bump, computeStats, getField, labelLines, alphaOf, filterActive, filterHides } from './model.js';
 import { openFilter } from './ui-filter.js';
+import { openSummary } from './ui-summary.js';
 import { renderMap, dataBounds, fitView } from './render.js';
 import { hitPolygon, distToFeat, toWorld, M_PER_UNIT } from './geo.js';
 import { $, h, toast, normKey, hexA } from './util.js';
@@ -298,6 +299,7 @@ export function initMap() {
   $('#bZo').onclick = () => zoomAt(view.w / 2, view.h / 2, 1 / 1.6);
   $('#bFind').onclick = findBlock;
   $('#bFilter').onclick = () => openFilter();
+  $('#bSum').onclick = () => openSummary();
   $('#bGps').onclick = () => { if (!gps.on) gpsStart(); else gpsSheet(); };
   const lb = $('#bLbl');
   const syncLbl = () => lb.classList.toggle('on', theme().label.show !== false);

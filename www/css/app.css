@@ -141,3 +141,39 @@ a.btn{display:inline-flex;align-items:center;color:var(--tx)}
 .mly i{width:11px;height:11px;border-radius:3px;display:inline-block}
 .mly em{font-style:normal;font-weight:400;color:var(--mut);font-size:11px}
 .mgrp .ml{font-size:9px;color:var(--mut);height:14px;line-height:14px}
+.andbox{border-left:3px solid var(--g);padding-left:8px;margin:6px 0}
+.sumgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0}
+.sumgrid .mt b{font-size:16px}
+.distrow{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:13px}
+.distrow .sw{width:14px;height:14px;border-radius:3px;flex:none;display:inline-block}
+.distrow .dl{flex:0 0 38%;min-width:0}
+.distrow .dbar{flex:1;height:9px;background:var(--soft2,#e9eeeb);border-radius:5px;overflow:hidden;display:block}
+.distrow .dbar i{display:block;height:100%}
+.sumtab td,.sumtab th{padding:5px 7px;text-align:right;white-space:nowrap}.sumtab td:first-child,.sumtab th:first-child{text-align:left}
+.rkh{font-weight:700;margin:10px 0 4px;font-size:13px}
+.rk{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.rk .rn{width:18px;color:var(--mut);font-size:12px}.rk .sw{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none}.rk .rv{margin-left:auto;font-weight:700}
+
+/* ---- mode gelap ---- */
+:root[data-theme=dark]{color-scheme:dark;--bg:#0f1512;--card:#19211d;--line:#33403a;--tx:#e5ece8;--mut:#9aa9a1;--soft2:#2a3631;--warn:#ff8a80}
+:root[data-theme=dark] #top select,:root[data-theme=dark] input[type=text],:root[data-theme=dark] input[type=password],:root[data-theme=dark] input[type=number],:root[data-theme=dark] textarea,:root[data-theme=dark] select{background:#232d28;color:var(--tx);border-color:var(--line)}
+:root[data-theme=dark] input[type=color]{background:#232d28}
+:root[data-theme=dark] #nav,:root[data-theme=dark] #sheetHost .sheet,:root[data-theme=dark] .themeItem,:root[data-theme=dark] .layer,:root[data-theme=dark] .ic{background:var(--card)}
+:root[data-theme=dark] .fab{background:#19211df2;color:var(--tx)}
+:root[data-theme=dark] .fab.on{background:var(--g);color:#fff}
+:root[data-theme=dark] .legendChip{background:#19211df2;color:var(--tx)}
+:root[data-theme=dark] .loading{background:#0f1512e0}
+:root[data-theme=dark] button.btn.sec,:root[data-theme=dark] .chip,:root[data-theme=dark] .bdg{background:#2a3631;color:var(--tx)}
+:root[data-theme=dark] .bdg.dark,:root[data-theme=dark] .chip.fchip.sel{background:var(--g);color:#fff}
+:root[data-theme=dark] button.btn.red{background:#3b2220;color:#ffb4ab}
+:root[data-theme=dark] th{background:#232d28;color:var(--tx)}
+:root[data-theme=dark] .cls,:root[data-theme=dark] .rule{background:#1e2823}
+:root[data-theme=dark] .themeItem.active{background:#17342a}
+:root[data-theme=dark] .hint{background:#3a3418;border-color:#6b5e24;color:#f5e9b0}
+:root[data-theme=dark] .mt{background:#222c27}
+:root[data-theme=dark] .bar .bt{background:#2a3631}
+:root[data-theme=dark] .chip.fchip{background:#232d28;color:var(--tx)}
+:root[data-theme=dark] .ic-code{color:#5fd4a0}
+:root[data-theme=dark] a.btn{color:var(--tx)}
+:root[data-theme=dark] .sw2 span::after{background:#e5ece8}
+:root[data-theme=dark] .mcol .mv,:root[data-theme=dark] .mb .mv{color:var(--tx)}

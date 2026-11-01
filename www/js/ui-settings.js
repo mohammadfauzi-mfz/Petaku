@@ -1,5 +1,5 @@
 import { S, saveNow, VERSION } from './model.js';
-import { h, toast } from './util.js';
+import { h, toast, select, uiMode, setUiMode } from './util.js';
 import { openSheet, row, textInput, check } from './ui-common.js';
 import { push, pull, checkRemote, checkConfig } from './sync.js';
 import { checkUpdate, installUpdate, BUILD } from './update.js';
@@ -55,6 +55,9 @@ export function openSettings() {
   sc.append(h('div', { class: 'btns' }, bPull, bPush, bCheck));
   sc.append(status);
   body.append(sc);
+  body.append(h('div', { class: 'card' }, h('h3', {}, 'Tampilan aplikasi'),
+    row('Mode', select([['auto', 'Ikuti HP (otomatis)'], ['light', 'Terang'], ['dark', 'Gelap']], uiMode(), (v) => setUiMode(v))),
+    h('div', { class: 'mut small' }, 'Hanya mengubah tampilan aplikasi. Peta dan hasil ekspor tetap berlatar putih.')));
 
   // ---------- pembaruan ----------
   const uc = h('div', { class: 'card' }, h('h3', {}, 'Pembaruan aplikasi'));

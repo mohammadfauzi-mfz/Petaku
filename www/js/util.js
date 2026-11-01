@@ -186,3 +186,13 @@ export async function shareFiles(list, title) {
   for (const f of list) { await shareFile(f.name, f.data, f.mime || 'application/octet-stream', title); await new Promise((r) => setTimeout(r, 350)); }
   return true;
 }
+
+// ---------- mode tampilan (Auto / Terang / Gelap), disimpan per HP ----------
+export function uiMode() { try { return localStorage.getItem('petaku-ui') || 'auto'; } catch (e) { return 'auto'; } }
+export function applyUiMode() {
+  const m = uiMode();
+  let dark = m === 'dark';
+  if (m === 'auto') { try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) { dark = false; } }
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+}
+export function setUiMode(m) { try { localStorage.setItem('petaku-ui', m); } catch (e) { /* abaikan */ } applyUiMode(); }

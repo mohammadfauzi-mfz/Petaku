@@ -1,7 +1,7 @@
 import { S, theme, bump, defThemes, defRules, saveSoon, emit, getProp } from './model.js';
 import { PATTERNS } from './render.js';
 import { h, $, uid, clone, toast, select, pickFile, readText, readDataURL, shareFile } from './util.js';
-import { confirmBox, textInput, numInput, colorInput, textArea, check, row } from './ui-common.js';
+import { openSheet, confirmBox, textInput, numInput, colorInput, textArea, check, row } from './ui-common.js';
 
 const openKeys = new Set(['dasar', 'kelas']);
 const PAL = ['#1f77b4', '#2ca02c', '#ff7f0e', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#7f7f7f', '#00c6f7', '#ffd30b'];
@@ -46,6 +46,76 @@ function classEditor(t, c, i) {
   return wrap;
 }
 
+// pilih CSV sumber untuk syarat (kosong = CSV tema ini)
+function dsPick(q) {
+  return h('div', { class: 'r2' }, h('span', { class: 'mut small', style: { flex: 'none', minWidth: 0 } }, 'CSV'),
+    select([['', 'CSV tema ini'], ...S.dsList.map((d) => [d.id, d.name])], q.dsId || '', (v) => { q.dsId = v; touch(); }));
+}
+// syarat tambahan: harus terpenuhi bersama syarat utama
+function andEditor(r, q, qi) {
+  const w = h('div', { class: 'andbox' });
+  w.append(h('div', { class: 'r1' },
+    h('b', { class: 'small', style: { flex: 'none' } }, 'DAN'),
+    select([['csv', 'Kolom CSV'], ['poly', 'Atribut poligon']], q.source || 'csv', (v) => { q.source = v; touch(); rerender(); }, { style: 'flex:0 0 120px' }),
+    h('div', { style: { flex: 1 } }, textInput(q.field, (v) => { q.field = v; touch(); }, { placeholder: 'Nama kolom', list: q.source === 'poly' ? 'dl-poly' : 'dl-fields' })),
+    h('button', { class: 'btn red sm', onclick: () => { r.and.splice(qi, 1); touch(); rerender(); } }, '✕')));
+  if (q.source !== 'poly' && S.dsList.length > 1) w.append(dsPick(q));
+  w.append(h('div', { class: 'r2' },
+    select(OPS, q.op || 'equals', (v) => { q.op = v; touch(); rerender(); }),
+    (q.op === 'empty' || q.op === 'notempty') ? h('span', { class: 'mut' }, '(tanpa nilai)') : textInput(q.value, (v) => { q.value = v; touch(); }, { placeholder: 'Nilai / regex' })));
+  return w;
+}
+
+// ---- template tema bawaan ----
+const KC = (color, label, min, max) => ({ id: uid(), color, label, min, max, values: '', pattern: 'none', pc: '#ff0004', opacity: 100 });
+const KK = (color, label, values) => ({ id: uid(), color, label, min: null, max: null, values, pattern: 'none', pc: '#ff0004', opacity: 100 });
+const TEMPLATES = [
+  { key: 'capaian', name: 'Capaian % (5 kelas biru–merah)', mode: 'range', desc: '≥100 biru, 95–<100 hijau, 90–<95 kuning, 85–<90 oranye, <85 merah',
+    classes: () => [KC('#00c6f7', '≥ 100%', 100, null), KC('#00d518', '95% - <100%', 95, 100), KC('#fbff02', '90% - <95%', 90, 95), KC('#ffd30b', '85% - <90%', 85, 90), KC('#ff0004', '< 85%', null, 85)] },
+  { key: 'tiga', name: 'Tinggi / Sedang / Rendah (3 kelas)', mode: 'range', desc: 'hijau ≥90, kuning 80–<90, merah <80 (ubah batasnya sesuai data)',
+    classes: () => [KC('#00d518', 'Tinggi (≥ 90)', 90, null), KC('#fbff02', 'Sedang (80 - <90)', 80, 90), KC('#ff0004', 'Rendah (< 80)', null, 80)] },
+  { key: 'selisih', name: 'Selisih naik / turun (7 kelas)', mode: 'range', desc: 'merah = turun, kuning = stabil, hijau = naik, di sekitar nol',
+    classes: () => [KC('#00a63a', 'Naik > +10', 10, null), KC('#00d518', 'Naik +5 s/d +10', 5, 10), KC('#a1ff79', 'Naik +2 s/d +5', 2, 5), KC('#fbff02', 'Stabil -2 s/d +2', -2, 2), KC('#ffb27a', 'Turun -5 s/d -2', -5, -2), KC('#ff6b6b', 'Turun -10 s/d -5', -10, -5), KC('#d00000', 'Turun < -10', null, -10)] },
+  { key: 'gradasi', name: 'Gradasi biru (5 kelas rendah → tinggi)', mode: 'range', desc: 'untuk nilai umum; batas 20/40/60/80, ubah sesuai data',
+    classes: () => [KC('#08306b', '≥ 80', 80, null), KC('#2171b5', '60 - <80', 60, 80), KC('#6baed6', '40 - <60', 40, 60), KC('#c6dbef', '20 - <40', 20, 40), KC('#f7fbff', '< 20', null, 20)] },
+  { key: 'kategori', name: 'Kategori Ya / Tidak', mode: 'category', desc: 'kolom berisi Ya atau Tidak (hijau / merah)',
+    classes: () => [KK('#00d518', 'Ya', 'ya'), KK('#ff0004', 'Tidak', 'tidak')] },
+  { key: 'bbc', name: 'Kategori SB / B / KB', mode: 'category', desc: 'seperti BBC3 Scoring (biru, hijau, kuning)',
+    classes: () => [KK('#00c6f7', 'SB', 'SB'), KK('#00d518', 'B', 'B'), KK('#ffd30b', 'KB', 'KB')] },
+];
+
+function templateSheet(rerender) {
+  let tk = TEMPLATES[0].key, nm = '', field = '', dsId = S.ds ? S.ds.id : '';
+  const body = h('div', {});
+  const draw = () => {
+    body.innerHTML = '';
+    const tp = TEMPLATES.find((x) => x.key === tk);
+    body.append(row('Template', select(TEMPLATES.map((x) => [x.key, x.name]), tk, (v) => { tk = v; draw(); })));
+    body.append(h('div', { class: 'mut small' }, tp.desc));
+    body.append(row('Nama peta', textInput(nm, (v) => { nm = v; }, { placeholder: 'mis. Pemupukan 2026' })));
+    const dsel = S.dsList.length ? select([['', 'CSV aktif'], ...S.dsList.map((d) => [d.id, d.name])], dsId, (v) => { dsId = v; draw(); }) : null;
+    if (dsel) body.append(row('CSV', dsel));
+    const ds = S.dsList.find((d) => d.id === dsId) || S.ds;
+    const hdrs = ds ? ds.headers : [];
+    body.append(h('datalist', { id: 'dl-tpl' }, hdrs.map((x) => h('option', { value: x }))));
+    body.append(row('Kolom data', textInput(field, (v) => { field = v; }, { list: 'dl-tpl', placeholder: 'Nama kolom CSV yang diwarnai' })));
+    body.append(h('div', { class: 'mut small' }, 'Batas nilai dan warna kelas bisa diubah lagi di editor tema setelah dibuat.'));
+    body.append(h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => {
+      field = field.trim();
+      if (!field) { toast('Isi nama kolom data'); return; }
+      const t = defThemes()[0];
+      t.id = 'u' + uid(); t.name = nm.trim() || tp.name.replace(/ \(.*\)$/, ''); t.title = (t.name.toUpperCase()) + '\nPERIODE'; t.legendTitle = t.name + ' :';
+      t.field = field; t.mode = tp.mode; t.classes = tp.classes(); t.legendImage = ''; t.dsId = dsId || '';
+      const base = defRules().find((r) => r.id === 'r_tbm');
+      t.rules = [base, { id: 'r_k' + uid(), enabled: true, source: 'csv', field, op: 'empty', value: '', fill: '#ffffff', pattern: 'none', pc: '#000000', legendShow: false, legendGroup: '', legendLabel: 'Tanpa data' }];
+      t.label = { show: true, sizePx: 10, sizePt: 3.0, force: false, template: `{BLOK}\n{${field}}` };
+      S.themes.push(t); S.themeId = t.id; bump('theme'); close(); rerender(); toast('Tema dibuat dari template');
+    } }, 'Buat tema')));
+  };
+  draw();
+  const close = openSheet('Tema dari template', body, {});
+}
+
 function ruleEditor(t, r, i) {
   const wrap = h('div', { class: 'rule' });
   wrap.append(h('div', { class: 'r1' },
@@ -57,6 +127,9 @@ function ruleEditor(t, r, i) {
     select(OPS, r.op, (v) => { r.op = v; touch(); rerender(); }),
     (r.op === 'empty' || r.op === 'notempty') ? h('span', { class: 'mut' }, '(tanpa nilai)') : textInput(r.value, (v) => { r.value = v; touch(); }, { placeholder: 'Nilai / regex' }));
   wrap.append(r2);
+  if (r.source !== 'poly' && S.dsList.length > 1) wrap.append(dsPick(r));
+  for (const [qi, q] of (r.and || []).entries()) wrap.append(andEditor(r, q, qi));
+  wrap.append(h('div', { class: 'r2' }, h('button', { class: 'btn sec sm', onclick: () => { (r.and = r.and || []).push({ source: 'csv', dsId: '', field: '', op: 'equals', value: '' }); touch(); rerender(); } }, '+ Syarat tambahan (DAN)')));
   wrap.append(h('div', { class: 'r2' }, h('span', { class: 'mut small', style: { flex: 'none', minWidth: 0 } }, 'Cara'),
     select([['replace', 'Ganti warna blok'], ['overlay', 'Arsiran di atas warna tema']], r.mode === 'overlay' ? 'overlay' : 'replace', (v) => { r.mode = v; if (v === 'overlay' && (!r.pattern || r.pattern === 'none')) r.pattern = 'diag'; touch(); rerender(); })));
   if (r.mode === 'overlay') {
@@ -119,6 +192,7 @@ export function renderTheme() {
       h('button', { class: 'btn red sm', onclick: async (e) => { e.stopPropagation(); if (S.themes.length < 2) { toast('Minimal satu tema'); return; } if (!await confirmBox(`Hapus tema "${x.name}"?`, 'Hapus')) return; S.themes = S.themes.filter((y) => y.id !== x.id); if (S.themeId === x.id) S.themeId = S.themes[0].id; bump('theme'); rerender(); } }, 'Hapus')));
   }
   list.append(h('div', { class: 'btns' },
+    h('button', { class: 'btn', onclick: () => templateSheet(rerender) }, '+ Dari template'),
     h('button', { class: 'btn sec', onclick: () => { const base = defThemes()[0]; base.id = 'u' + uid(); base.name = 'Tema baru'; base.title = 'JUDUL PETA\nPERIODE'; base.legendTitle = 'Keterangan :'; base.field = ''; base.classes = []; base.legendImage = ''; S.themes.push(base); S.themeId = base.id; bump('theme'); rerender(); } }, '+ Tema kosong'),
     h('button', { class: 'btn sec', onclick: async () => {
       const f = (await pickFile('.json,application/json'))[0]; if (!f) return;

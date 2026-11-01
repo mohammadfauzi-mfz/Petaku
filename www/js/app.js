@@ -12,7 +12,9 @@ import { importLayerFile } from './ui-layers.js';
 import { checkRemote } from './sync.js';
 import { checkUpdate, BUILD } from './update.js';
 import { petaku } from './native.js';
-import { base64ToBytes } from './util.js';
+import { base64ToBytes, applyUiMode } from './util.js';
+applyUiMode();
+try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyUiMode); } catch (e) { /* abaikan */ }
 
 let page = 'map';
 const renderers = { data: renderData, theme: renderTheme, layers: renderLayers, export: renderExport };

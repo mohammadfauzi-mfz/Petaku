@@ -192,10 +192,11 @@ export function indexDs(ds) {
     if (k && !ds.map.has(k)) ds.map.set(k, r);
   }
 }
-export function getField(row, name) {
+export function getField(row, name, ds) {
   if (!row || !name) return undefined;
   if (name in row) return row[name];
-  const k = S.ds && S.ds.hmap[String(name).toLowerCase().trim()];
+  ds = ds || S.ds;
+  const k = ds && ds.hmap[String(name).toLowerCase().trim()];
   return k !== undefined ? row[k] : undefined;
 }
 const getProp = (props, name) => {
@@ -281,10 +282,26 @@ const reCache = new Map();
 function re(v) { let r = reCache.get(v); if (!r) { try { r = new RegExp(v, 'i'); } catch (e) { r = /$^/; } reCache.set(v, r); } return r; }
 const isBlank = (v) => { const s = String(v == null ? '' : v).trim(); return s === '' || s === '-' || s.startsWith('#'); };
 
-export function matchRule(r, row, props) {
+// aturan = syarat utama + syarat tambahan r.and (semua harus terpenuhi).
+// Tiap syarat boleh memakai CSV tertentu (dsId) selain CSV tema; baris dicari lewat kode blok (key).
+export function matchRule(r, row, props, key) {
+  if (!condMatch(r, row, props, key)) return false;
+  if (r.and) for (const q of r.and) if (q && q.field && !condMatch(q, row, props, key)) return false;
+  return true;
+}
+function condMatch(r, row, props, key) {
   let v;
   if (r.source === 'poly') v = getProp(props, r.field);
-  else { if (!row) return false; v = getField(row, r.field); }
+  else {
+    let rw = row, ds = null;
+    if (r.dsId) {
+      ds = S.dsList.find((x) => x.id === r.dsId);
+      if (!ds) return false;
+      rw = key ? ds.map.get(key) || null : null;
+    }
+    if (!rw) return false;
+    v = getField(rw, r.field, ds);
+  }
   if (v === undefined) return false;
   const s = String(v == null ? '' : v).trim(), a = s.toLowerCase(), b = String(r.value == null ? '' : r.value).trim().toLowerCase();
   switch (r.op) {
@@ -317,21 +334,21 @@ export function noDataStyle(t) {
 }
 
 // aturan mode "overlay": arsiran di atas warna kelas tema (warna tema tetap)
-export function resolveStyle(t, row, props) {
-  const base = resolveBase(t, row, props);
+export function resolveStyle(t, row, props, key) {
+  const base = resolveBase(t, row, props, key);
   if (base.rule) return base;
   let ov = null;
   for (const r of t.rules || []) {
     if (r.enabled === false || r.mode !== 'overlay') continue;
-    if (matchRule(r, row, props)) { (ov = ov || []).push({ pattern: r.pattern || 'diag', pc: r.pc || '#000000', alpha: alphaOf(t, r), rule: r.id }); }
+    if (matchRule(r, row, props, key)) { (ov = ov || []).push({ pattern: r.pattern || 'diag', pc: r.pc || '#000000', alpha: alphaOf(t, r), rule: r.id }); }
   }
   if (ov) base.over = ov;
   return base;
 }
-function resolveBase(t, row, props) {
+function resolveBase(t, row, props, key) {
   for (const r of t.rules || []) {
     if (r.enabled === false || r.mode === 'overlay') continue;
-    if (matchRule(r, row, props)) return { fill: r.noFill ? null : r.fill, pattern: r.pattern || 'none', pc: r.pc, ci: -1, rule: r.id, alpha: alphaOf(t, r) };
+    if (matchRule(r, row, props, key)) return { fill: r.noFill ? null : r.fill, pattern: r.pattern || 'none', pc: r.pc, ci: -1, rule: r.id, alpha: alphaOf(t, r) };
   }
   if (!row) return noDataStyle(t);
   const raw = getField(row, t.field);
@@ -394,7 +411,8 @@ export function featPass(meta, f) {
   const c = filterCtx();
   if (meta.themed) {
     if (!estAfdOk(c, f.props)) return false;
-    for (const q of c.conds) if (!matchRule(q, f._row, f.props)) return false;
+    const key = normKey(getProp(f.props, meta.keyField));
+    for (const q of c.conds) if (!matchRule(q, f._row, f.props, key)) return false;
     return true;
   }
   switch (meta.id) {
@@ -444,7 +462,7 @@ export function ensureStyles(meta, feats) {
     const row = S.ds && !(dups && dups.has(key)) ? S.ds.map.get(key) || null : null;
     f._dup = !!(dups && dups.has(key));
     f._row = row;
-    f._style = resolveStyle(t, row, f.props);
+    f._style = resolveStyle(t, row, f.props, key);
   }
   const on = filterActive(t);
   for (const f of feats) f._pass = on ? featPass(meta, f) : true;
