@@ -194,5 +194,6 @@ export function applyUiMode() {
   let dark = m === 'dark';
   if (m === 'auto') { try { dark = window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) { dark = false; } }
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  try { window.dispatchEvent(new Event('petaku-ui')); } catch (e) { /* abaikan */ }
 }
 export function setUiMode(m) { try { localStorage.setItem('petaku-ui', m); } catch (e) { /* abaikan */ } applyUiMode(); }

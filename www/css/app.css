@@ -177,3 +177,4 @@ a.btn{display:inline-flex;align-items:center;color:var(--tx)}
 :root[data-theme=dark] a.btn{color:var(--tx)}
 :root[data-theme=dark] .sw2 span::after{background:#e5ece8}
 :root[data-theme=dark] .mcol .mv,:root[data-theme=dark] .mb .mv{color:var(--tx)}
+:root[data-theme=dark] #cv{background:#0f1512}

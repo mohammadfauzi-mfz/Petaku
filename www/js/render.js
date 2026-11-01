@@ -40,6 +40,20 @@ function dashArr(s, k) {
   const a = String(s).split(/[\s,]+/).map(Number).filter((x) => x > 0);
   return a.length ? a.map((x) => x * k) : [];
 }
+// ---- peta layar mode gelap: warna sangat gelap -> terang, sangat terang (putih) -> abu gelap; warna tema tidak berubah ----
+function lum(c) {
+  const m = /^#([0-9a-f]{6})$/i.exec(c || ''); if (!m) return 0.5;
+  const n = parseInt(m[1], 16);
+  return (0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255;
+}
+function darkMap(c) {
+  if (!c) return c;
+  const l = lum(c);
+  if (!/^#[0-9a-f]{6}$/i.test(c)) return c;
+  if (l < 0.25) return '#d3dcd7';
+  if (l > 0.93) return '#2a3530';
+  return c;
+}
 const withAlpha = (ctx, a, fn) => { const o = ctx.globalAlpha; ctx.globalAlpha = o * a; fn(); ctx.globalAlpha = o; };
 
 // view: {cx, cy, scale, w, h}; o: {unit, ptPx, screen, highlight, labels}
@@ -49,6 +63,8 @@ export function renderMap(ctx, v, o) {
   const x0 = v.cx - v.w / 2 / s, x1 = v.cx + v.w / 2 / s, y0 = v.cy - v.h / 2 / s, y1 = v.cy + v.h / 2 / s;
   const th = theme();
   const tile = 4.5 * unit;
+  const DKM = !!o.screen && document.documentElement.dataset.theme === 'dark';
+  const dk = DKM ? darkMap : (c) => c;
   const FH = filterHides(th), FD = filterDims(th);
   ctx.save();
   ctx.translate(tx, ty); ctx.scale(s, s);
@@ -70,19 +86,20 @@ export function renderMap(ctx, v, o) {
         const path = featPath(f);
         let fill = st.fill, pat = 'none', pc = '#000', alpha = st.fillOpacity == null ? 1 : st.fillOpacity;
         if (meta.themed && f._style) { fill = f._style.fill; pat = f._style.pattern; pc = f._style.pc; alpha = f._style.alpha == null ? 1 : f._style.alpha; }
-        if (dim) { fill = '#e3e3e3'; pat = 'none'; alpha = 1; }
+        if (dim) { fill = DKM ? '#3a4540' : '#e3e3e3'; pat = 'none'; alpha = 1; }
+        fill = dk(fill); pc = dk(pc);
         if (fill) { ctx.fillStyle = fill; withAlpha(ctx, alpha, () => ctx.fill(path, 'evenodd')); }
-        if (pat !== 'none') { ctx.fillStyle = getPattern(ctx, pat, pc || '#000', tile, s); withAlpha(ctx, meta.themed ? alpha : 1, () => ctx.fill(path, 'evenodd')); }
-        if (!dim && meta.themed && f._style && f._style.over) for (const o of f._style.over) { ctx.fillStyle = getPattern(ctx, o.pattern, o.pc, tile, s); withAlpha(ctx, o.alpha, () => ctx.fill(path, 'evenodd')); }
-        if (hasStroke) { ctx.lineWidth = lw; ctx.strokeStyle = st.stroke; ctx.setLineDash(dashArr(st.dash, unit / s)); ctx.stroke(path); }
+        if (pat !== 'none') { ctx.fillStyle = getPattern(ctx, pat, dk(pc || '#000'), tile, s); withAlpha(ctx, meta.themed ? alpha : 1, () => ctx.fill(path, 'evenodd')); }
+        if (!dim && meta.themed && f._style && f._style.over) for (const o of f._style.over) { ctx.fillStyle = getPattern(ctx, o.pattern, dk(o.pc), tile, s); withAlpha(ctx, o.alpha, () => ctx.fill(path, 'evenodd')); }
+        if (hasStroke) { ctx.lineWidth = lw; ctx.strokeStyle = dk(st.stroke); ctx.setLineDash(dashArr(st.dash, unit / s)); ctx.stroke(path); }
       }
       if (f.lines) {
-        if (hasStroke) { ctx.lineWidth = lw; ctx.strokeStyle = st.stroke; ctx.setLineDash(dashArr(st.dash, unit / s)); ctx.stroke(linePath(f)); }
+        if (hasStroke) { ctx.lineWidth = lw; ctx.strokeStyle = dk(st.stroke); ctx.setLineDash(dashArr(st.dash, unit / s)); ctx.stroke(linePath(f)); }
       }
       if (f.points && st.pointRadius > 0) {
-        ctx.fillStyle = st.pointColor || '#d32f2f';
+        ctx.fillStyle = dk(st.pointColor || '#d32f2f');
         const r = st.pointRadius * unit / s;
-        for (const p of f.points) { ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, 7); ctx.fill(); if (hasStroke) { ctx.lineWidth = lw; ctx.strokeStyle = st.stroke; ctx.stroke(); } }
+        for (const p of f.points) { ctx.beginPath(); ctx.arc(p[0], p[1], r, 0, 7); ctx.fill(); if (hasStroke) { ctx.lineWidth = lw; ctx.strokeStyle = dk(st.stroke); ctx.stroke(); } }
       }
     }
     ctx.setLineDash([]);
@@ -134,12 +151,17 @@ export function renderMap(ctx, v, o) {
         }
         const sx = a.x * s + tx, sy = a.y * s + ty;
         const top = sy - (lines.length - 1) * lh / 2;
+        if (DKM) {
+          const bg = f._style && f._style.fill ? dk(f._style.fill) : null;
+          const al = f._style && f._style.alpha != null ? f._style.alpha : 1;
+          ctx.fillStyle = (!bg || al < 0.55 || f._pass === false || lum(bg) < 0.45) ? '#f2f6f4' : '#000';
+        }
         for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], sx, top + i * lh);
       }
     } else if (st.labelField) {
       const fpx = o.screen ? Math.max(9, (st.labelSizePt || 4) * 1.7) : (st.labelSizePt || 4) * o.ptPx;
       ctx.font = `${st.labelBold ? 'bold ' : ''}${fpx}px ${FF}`;
-      ctx.fillStyle = st.labelColor || '#000';
+      ctx.fillStyle = dk(st.labelColor || '#000');
       for (const f of rt.feats) {
         const b = f.bbox;
         if (b[2] < x0 || b[0] > x1 || b[3] < y0 || b[1] > y1) continue;
@@ -151,7 +173,7 @@ export function renderMap(ctx, v, o) {
         else if (f.polys) { const a = labelAnchor(f); ax = a.x; ay = a.y; }
         else { ax = (b[0] + b[2]) / 2; ay = (b[1] + b[3]) / 2; }
         const sx = ax * s + tx, sy = ay * s + ty;
-        if (st.labelHalo !== false) { ctx.lineWidth = Math.max(1.5, fpx * 0.22); ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineJoin = 'round'; ctx.strokeText(String(val), sx, sy); }
+        if (st.labelHalo !== false) { ctx.lineWidth = Math.max(1.5, fpx * 0.22); ctx.strokeStyle = DKM ? 'rgba(15,21,18,.9)' : 'rgba(255,255,255,.9)'; ctx.lineJoin = 'round'; ctx.strokeText(String(val), sx, sy); }
         ctx.fillText(String(val), sx, sy);
       }
     }

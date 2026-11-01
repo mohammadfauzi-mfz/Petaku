@@ -44,7 +44,7 @@ function draw() {
   raf = 0;
   if (!ctx || !view.w) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, view.w, view.h);
+  ctx.fillStyle = document.documentElement.dataset.theme === 'dark' ? '#0f1512' : '#fff'; ctx.fillRect(0, 0, view.w, view.h);
   try { renderMap(ctx, view, { unit: 1, ptPx: 1, screen: true, highlight }); } catch (e) { console.error(e); }
   drawGps();
 }
@@ -299,6 +299,7 @@ export function initMap() {
   $('#bZo').onclick = () => zoomAt(view.w / 2, view.h / 2, 1 / 1.6);
   $('#bFind').onclick = findBlock;
   $('#bFilter').onclick = () => openFilter();
+  window.addEventListener('petaku-ui', () => requestDraw());
   $('#bSum').onclick = () => openSummary();
   $('#bGps').onclick = () => { if (!gps.on) gpsStart(); else gpsSheet(); };
   const lb = $('#bLbl');
