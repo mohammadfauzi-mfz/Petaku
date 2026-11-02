@@ -178,3 +178,10 @@ a.btn{display:inline-flex;align-items:center;color:var(--tx)}
 :root[data-theme=dark] .sw2 span::after{background:#e5ece8}
 :root[data-theme=dark] .mcol .mv,:root[data-theme=dark] .mb .mv{color:var(--tx)}
 :root[data-theme=dark] #cv{background:#0f1512}
+#loginWrap{position:fixed;inset:0;z-index:10000;background:linear-gradient(160deg,#0b5d3b,#0f7a4d 60%,#1b9a64);display:flex;align-items:center;justify-content:center;padding:20px}
+.loginbox{width:100%;max-width:360px;background:var(--card);border-radius:18px;padding:22px 20px;display:flex;flex-direction:column;gap:10px;box-shadow:0 10px 40px #0005}
+.loginbox .logo{font-size:44px;text-align:center;line-height:1}
+.loginbox h2{margin:0 0 4px;text-align:center;color:var(--g)}
+.loginbox input{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font:inherit;background:var(--card);color:var(--tx)}
+.loginmsg{color:var(--warn);font-size:13px;min-height:1em}
+.btn.block{width:100%}

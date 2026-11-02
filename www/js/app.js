@@ -13,6 +13,7 @@ import { checkRemote } from './sync.js';
 import { checkUpdate, BUILD } from './update.js';
 import { petaku } from './native.js';
 import { base64ToBytes, applyUiMode } from './util.js';
+import { requireLogin, backgroundCheck } from './auth.js';
 applyUiMode();
 try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyUiMode); } catch (e) { /* abaikan */ }
 
@@ -76,6 +77,7 @@ async function startupChecks() {
 
 async function boot() {
   await init();
+  await requireLogin();
   fillThemeSel();
   initMap();
   $('#themeSel').addEventListener('change', (e) => { S.themeId = e.target.value; bump('theme'); if (page !== 'map') renderers[page] && renderers[page](); });
@@ -110,6 +112,7 @@ async function boot() {
     takeIncoming();
   }
   setTimeout(startupChecks, 2500);
+  setTimeout(backgroundCheck, 4000);
   window.__app = { S, showPage, handleIncoming };
 }
 boot().catch((e) => { console.error(e); $('#loading').textContent = 'Gagal memulai: ' + e.message; });

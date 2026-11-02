@@ -169,3 +169,7 @@ export async function pull(scope, progress) {
   await saveNow();
   return { manifest: m, done };
 }
+
+// ---------- akun (users.json) ----------
+export async function remoteText(p) { checkConfig(false); return getText(p); }
+export async function pushText(p, text, message) { checkConfig(true); return putText(p, text, message); }
