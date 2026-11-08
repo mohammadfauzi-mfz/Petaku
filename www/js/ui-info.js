@@ -1,5 +1,5 @@
 // Kartu info blok yang rapi: header, angka utama, grup detail dengan grafik mini
-import { buildTables } from './ui-tables.js';
+import { buildTables, tableSourceCols } from './ui-tables.js';
 import { S, theme, getProp, getField } from './model.js';
 import { h, num, toast } from './util.js';
 
@@ -203,7 +203,8 @@ export function buildBlockCard(layer, feat) {
 
     // detail
     const others = S.ds.headers.filter((c) => !used.has(c) && !HIDE_EMPTY(row[c]));
-    const avail = S.ds.headers.filter((c) => !used.has(c));
+    const tsrc = tableSourceCols(th, S.ds.headers);
+    const avail = S.ds.headers.filter((c) => !used.has(c) && !tsrc.has(c));
     const { monthly, consumed } = splitMonthly(avail);
     for (const g of monthly) {
       const ch = monthChart(g.yrs, row);

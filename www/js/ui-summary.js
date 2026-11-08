@@ -2,7 +2,7 @@
 import { S, theme, getField, getProp, computeStats, filterActive, filterSummary, ensureStyles } from './model.js';
 import { h, num, select, toast } from './util.js';
 import { openSheet } from './ui-common.js';
-import { compareTables, recapTable, autoTo } from './ui-tables.js';
+import { compareTables, recapTable, autoTo, recapGridTables, recapGrid } from './ui-tables.js';
 
 const fmt = (v) => { if (v == null || !isFinite(v)) return '–'; const a = Math.abs(v); return a >= 100 ? String(Math.round(v)) : a >= 10 ? String(Math.round(v * 10) / 10).replace('.', ',') : String(Math.round(v * 100) / 100).replace('.', ','); };
 const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
@@ -135,6 +135,21 @@ export function openSummary() {
       recapRows = { title: ct.title, per: `${MLAB[rFrom - 1]}–${MLAB[toN - 1]}`, ct, ...rt };
       rc2.append(h('div', { class: 'mut small' }, `Periode ${MLAB[rFrom - 1]}–${MLAB[toN - 1]}. Jumlah blok dijumlahkan dulu, lalu TON/HA, JJG/PKK, dan BJR dihitung ulang dari totalnya (bukan rata-rata antar blok).`), rt.el);
       body.append(rc2);
+    }
+
+    // rekap tabel kustom (mis. SPH) per wilayah: jumlahkan dulu, lalu rumus dihitung dari jumlahnya
+    {
+      const gts = recapGridTables(t);
+      if (gts.length) {
+        const gm2 = new Map();
+        for (const x of items) { if (!x.row) continue; const g = groupBy === 'estate' ? x.estate : x.afd; if (!gm2.has(g)) gm2.set(g, []); gm2.get(g).push({ row: x.row }); }
+        const gl2 = [...gm2].map(([name, blocks]) => ({ name, blocks })).sort((a, b) => a.name.localeCompare(b.name, 'id', { numeric: true }));
+        for (const gt of gts) {
+          const el = recapGrid(gt, gl2); if (!el) continue;
+          body.append(h('div', { class: 'card' }, h('h3', {}, gt.title + ' · ' + (groupBy === 'estate' ? 'per Estate' : 'per Afdeling')),
+            h('div', { class: 'mut small' }, 'Angka blok dijumlahkan per wilayah, lalu rumus dihitung dari jumlahnya (bukan rata-rata antar blok).'), el));
+        }
+      }
     }
 
     const txt = textReport(t, items, numeric, groupBy, groups, lows, highs, topN, recapRows);

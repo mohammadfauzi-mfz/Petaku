@@ -46,21 +46,114 @@ function series(row, prefix) {
 const lastMonth = (arr) => { let k = 0; if (arr) arr.forEach((v, i) => { if (v != null) k = i + 1; }); return k; };
 const sumRange = (arr, a, b) => { if (!arr) return null; let s = 0, n = 0; for (let i = a - 1; i < b; i++) if (arr[i] != null) { s += arr[i]; n++; } return n ? s : null; };
 
-// ---- sel bebas ----
-function fillTpl(str, row, props) {
-  return String(str == null ? '' : str).replace(/\{([^}]+)\}/g, (_, k) => {
+// ---- sel bebas + rumus ----
+// Teks biasa: {Kolom} / {Kolom|2} / {@Atribut} diganti isinya.
+// Rumus: diawali "=" , mis. =({Pkk Awal}/{Luas})  atau  ={Act}/{Plan}|0%   (akhiran |n = n desimal, |n% = dikali 100 + tanda %)
+function tokenize(src) {
+  const re = /\s*(?:(\d+\.?\d*|\.\d+)|([A-Za-z_]+)|(<=|>=|<>|[-+*/^(),<>=%]))/y, out = [];
+  let pos = 0;
+  while (pos < src.length) {
+    re.lastIndex = pos;
+    const m = re.exec(src);
+    if (!m) { if (/^\s*$/.test(src.slice(pos))) break; throw new Error('Karakter tidak dikenal'); }
+    pos = re.lastIndex;
+    if (m[1] != null) out.push({ t: 'n', v: parseFloat(m[1]) });
+    else if (m[2] != null) out.push({ t: 'i', v: m[2].toUpperCase() });
+    else out.push({ t: 'o', v: m[3] });
+  }
+  return out;
+}
+function evalFormula(src) {
+  const tk = tokenize(src); let i = 0;
+  const peek = () => tk[i], isO = (v) => tk[i] && tk[i].t === 'o' && tk[i].v === v;
+  const need = (v) => { if (!isO(v)) throw new Error('Tanda ' + v + ' kurang'); i++; };
+  const nn = (a, b, f) => (a == null || b == null ? null : f(a, b));
+  const cmp = () => {
+    let a = add();
+    while (tk[i] && tk[i].t === 'o' && ['<', '>', '<=', '>=', '=', '<>'].includes(tk[i].v)) {
+      const o = tk[i++].v, b = add();
+      a = nn(a, b, (x, y) => ({ '<': x < y, '>': x > y, '<=': x <= y, '>=': x >= y, '=': x === y, '<>': x !== y }[o] ? 1 : 0));
+    }
+    return a;
+  };
+  const add = () => { let a = mul(); while (isO('+') || isO('-')) { const o = tk[i++].v, b = mul(); a = nn(a, b, (x, y) => (o === '+' ? x + y : x - y)); } return a; };
+  const mul = () => { let a = pow(); while (isO('*') || isO('/')) { const o = tk[i++].v, b = pow(); a = nn(a, b, (x, y) => (o === '*' ? x * y : (y === 0 ? null : x / y))); } return a; };
+  const pow = () => { const a = un(); if (isO('^')) { i++; const b = pow(); return nn(a, b, (x, y) => Math.pow(x, y)); } return a; };
+  const un = () => { if (isO('-')) { i++; const a = un(); return a == null ? null : -a; } if (isO('+')) { i++; return un(); } return post(); };
+  const post = () => { let a = prim(); while (isO('%')) { i++; a = a == null ? null : a / 100; } return a; };
+  const prim = () => {
+    const t = tk[i++]; if (!t) throw new Error('Rumus belum lengkap');
+    if (t.t === 'n') return t.v;
+    if (t.t === 'o' && t.v === '(') { const a = cmp(); need(')'); return a; }
+    if (t.t === 'i') {
+      if (t.v === 'NA') return null;
+      need('(');
+      const args = [];
+      if (!isO(')')) { args.push(cmp()); while (isO(',')) { i++; args.push(cmp()); } }
+      need(')');
+      const ok = args.filter((x) => x != null);
+      switch (t.v) {
+        case 'ROUND': { if (args[0] == null) return null; const d = args[1] == null ? 0 : args[1], f = Math.pow(10, d); return Math.round(args[0] * f) / f; }
+        case 'ABS': return args[0] == null ? null : Math.abs(args[0]);
+        case 'SQRT': return args[0] == null || args[0] < 0 ? null : Math.sqrt(args[0]);
+        case 'SUM': return ok.length ? ok.reduce((x, y) => x + y, 0) : null;
+        case 'AVG': return ok.length ? ok.reduce((x, y) => x + y, 0) / ok.length : null;
+        case 'MIN': return ok.length ? Math.min(...ok) : null;
+        case 'MAX': return ok.length ? Math.max(...ok) : null;
+        case 'IF': return args[0] == null ? null : (args[0] ? args[1] : args[2]) == null ? null : (args[0] ? args[1] : args[2]);
+        default: throw new Error('Fungsi ' + t.v + ' tidak dikenal');
+      }
+    }
+    throw new Error('Rumus tidak valid');
+  };
+  const r = cmp();
+  if (i < tk.length) throw new Error('Rumus tidak valid');
+  return r;
+}
+const fmtF = (v, dec, pct) => {
+  if (v == null || !isFinite(v)) return '';
+  if (pct) v *= 100;
+  const d = dec == null ? 2 : dec;
+  return v.toLocaleString('en-US', { minimumFractionDigits: dec == null ? 0 : d, maximumFractionDigits: d }) + (pct ? '%' : '');
+};
+// resolve(k) -> nilai mentah (string / angka / null). Dipakai untuk satu blok maupun jumlah banyak blok.
+function fillTplR(str, resolve) {
+  str = String(str == null ? '' : str).trim();
+  const braces = (txt, asNum) => txt.replace(/\{([^}]+)\}/g, (_, k) => {
     let dec = null;
     const bar = k.lastIndexOf('|');
     if (bar > 0 && /^\d$/.test(k.slice(bar + 1).trim())) { dec = +k.slice(bar + 1).trim(); k = k.slice(0, bar); }
-    k = k.trim();
-    let v;
-    if (k.startsWith('@')) v = getProp(props, k.slice(1));
-    else { v = getField(row, k); if (v === undefined && k.toLowerCase() === 'blok') v = getProp(props, 'Blok'); }
-    if (v == null) return '';
-    v = String(v).trim();
-    if (dec != null) { const n = numT(v); if (n != null) return n.toFixed(dec); }
+    const v = resolve(k.trim());
+    if (asNum) { const n = numT(v); return n == null ? 'NA' : '(' + n + ')'; }
+    if (v == null || v === '') return '';
+    if (typeof v === 'number') return fmtF(v, dec == null ? 2 : dec, false);
+    const t = String(v).trim();
+    if (dec != null) { const n = numT(t); if (n != null) return n.toFixed(dec); }
+    return t;
+  });
+  if (str.startsWith('=')) {
+    let body = str.slice(1), dec = null, pct = false;
+    const m = /\|\s*(\d)?\s*(%)?\s*$/.exec(body);
+    if (m && (m[1] != null || m[2])) { dec = m[1] != null ? +m[1] : 0; pct = !!m[2]; body = body.slice(0, m.index); }
+    try { return fmtF(evalFormula(braces(body, true)), dec, pct); } catch (e) { return '#ERR'; }
+  }
+  return braces(str, false).trim();
+}
+function fillTpl(str, row, props) {
+  return fillTplR(str, (k) => {
+    if (k.startsWith('@')) return getProp(props, k.slice(1));
+    let v = getField(row, k); if (v === undefined && k.toLowerCase() === 'blok') v = getProp(props, 'Blok');
     return v;
-  }).trim();
+  });
+}
+// jumlah kolom numerik dari banyak blok (untuk rekap per wilayah)
+function fillTplSum(str, blocks) {
+  const cache = new Map();
+  return fillTplR(str, (k) => {
+    if (k.startsWith('@')) return null;
+    if (!cache.has(k)) { let sum = null; for (const b of blocks) { const n = numT(getField(b.row, k)); if (n != null) sum = (sum || 0) + n; } cache.set(k, sum); }
+    return cache.get(k);
+  });
 }
 function colorOf(t, text) {
   const s = String(text || '').trim().toLowerCase(); if (!s) return null;
@@ -141,6 +234,25 @@ function buildTable(t, row, props, inner) {
   if (inner) return body || h('div', {});
   return body;
 }
+// kolom data yang sudah dipakai tabel (dan dipilih disembunyikan dari "Data lainnya")
+export function tableSourceCols(th, headers) {
+  const out = new Set(), hs = headers || [];
+  for (const t of th.tables || []) {
+    if (t.enabled === false || t.hideSrc === false) continue;
+    if (t.kind === 'grid') {
+      for (const r of t.rows || []) for (const c of r.slice(1)) String(c || '').replace(/\{([^}]+)\}/g, (_, k) => {
+        k = k.trim(); const b = k.lastIndexOf('|'); if (b > 0 && /^\d$/.test(k.slice(b + 1).trim())) k = k.slice(0, b).trim();
+        if (!k.startsWith('@')) { const hh = hs.find((x) => String(x).trim().toLowerCase() === k.toLowerCase()); if (hh) out.add(hh); } return '';
+      });
+    } else if (t.kind === 'compare') {
+      for (const sd of [t.left, t.right]) for (const key of ['ton', 'jjg']) {
+        const pre = sd && sd[key]; if (!pre) continue;
+        for (const x of hs) if (x === pre || (String(x).startsWith(pre) && /^[\s_\-.]*\d{1,2}$/.test(String(x).slice(pre.length)))) out.add(x);
+      }
+    }
+  }
+  return out;
+}
 export function buildTables(th, row, props) {
   const out = [];
   if (!row) return out;
@@ -179,12 +291,18 @@ export const PRESETS = {
     left: { label: 'Act 2025', ton: 'Ton Act 2025', jjg: 'JJG Act 2025' }, right: { label: 'Act 2026', ton: 'Ton Act 2026', jjg: 'JJG Act 2026' },
     luas: 'Luas', pkk: 'Pkk Produktif', from: 1, to: 'auto', metrics: ['jjgpkk', 'jjg', 'tonha', 'ton', 'bjr'], pct: ['jjgpkk', 'tonha', 'bjr'], useRanges: true, ranges: RANGES(),
   }),
+  sph: () => ({
+    id: 't' + uid(), kind: 'grid', title: 'SPH (pokok per hektar)', enabled: true, color: '#0b5d3b', hideEmpty: true, recapCols: [3],
+    cols: ['Keterangan', 'Pokok', 'Luas (ha)', 'SPH'],
+    rows: [['Awal', '{Pkk Awal}', '{Luas}', '={Pkk Awal}/{Luas}|1'], ['Sensus', '{Pkk Sensus}', '{Luas}', '={Pkk Sensus}/{Luas}|1'], ['Produktif', '{Pkk Produktif}', '{Luas}', '={Pkk Produktif}/{Luas}|1']],
+    colors: [],
+  }),
   blank: () => ({
     id: 't' + uid(), kind: 'grid', title: 'Tabel baru', enabled: true, color: '#0b5d3b', hideEmpty: true,
     cols: ['Keterangan', 'Nilai'], rows: [['Luas (ha)', '{Luas}'], ['Pokok produktif', '{Pkk Produktif}']], colors: [],
   }),
 };
-const PRESET_LABEL = [['lsu', 'LSU (kategori berwarna)'], ['plan26', 'Plan vs Act 2026'], ['plan25', 'Plan vs Act 2025'], ['yoy', 'Act 2025 vs Act 2026'], ['blank', 'Tabel kosong']];
+const PRESET_LABEL = [['lsu', 'LSU (kategori berwarna)'], ['sph', 'SPH (pokok per hektar)'], ['plan26', 'Plan vs Act 2026'], ['plan25', 'Plan vs Act 2025'], ['yoy', 'Act 2025 vs Act 2026'], ['blank', 'Tabel kosong']];
 
 // ---- editor ----
 function sampleFeat() {
@@ -225,7 +343,8 @@ function openEditor(t, done) {
     body.append(h('div', { style: { margin: '6px 0' } }, check(t.open !== false, (v) => { t.open = v; touch(); }, 'Tampil terbuka di info lokasi')));
 
     if (t.kind === 'grid') {
-      body.append(h('div', { class: 'mut small' }, 'Isi sel boleh teks biasa atau {NamaKolom}. {Kolom|2} = 2 angka desimal, {@AtributPeta} = atribut poligon.'));
+      body.append(h('div', { class: 'mut small' }, 'Isi sel: teks biasa, {NamaKolom}, {Kolom|2} (2 desimal), {@AtributPeta}. Diawali = untuk menghitung, mis. ={Pkk Awal}/{Luas}|1  atau  ={Act}/{Plan}|0%  (|n = n desimal, |n% = tampil persen).'));
+      body.append(h('div', { class: 'mut small' }, 'Operator + - * / ^ ( ) dan fungsi ROUND, ABS, SQRT, SUM, AVG, MIN, MAX, IF(syarat; mis. IF({A}>100,1,0)). Kolom kosong atau pembagi 0 menghasilkan sel kosong.'));
       body.append(h('h4', {}, 'Kolom tabel'));
       body.append(listEditor(t.cols, () => 'Kolom', () => { fixRows(); draw(); touch(); }, (c, i) => textInput(c, (v) => { t.cols[i] = v; touch(); })));
       body.append(h('h4', {}, 'Baris'));
@@ -236,6 +355,13 @@ function openEditor(t, done) {
         r.forEach((c, j) => w.append(textInput(c, (v) => { r[j] = v; touch(); }, { list: 'dl-tc', placeholder: t.cols[j] || '' })));
         return w;
       }));
+      body.append(h('h4', {}, 'Rekap per wilayah (Ringkasan)'));
+      body.append(h('div', { class: 'mut small' }, 'Centang kolom yang ingin dirangkum per afdeling/estate. Angkanya dijumlahkan dulu per wilayah, lalu rumus dihitung dari jumlahnya (SPH = total pokok ÷ total luas).'));
+      t.recapCols = t.recapCols || [];
+      const rc = h('div', { class: 'chk2' });
+      t.cols.forEach((c, j) => { if (j > 0) rc.append(h('div', {}, check(t.recapCols.includes(j), (v) => { t.recapCols = v ? [...new Set([...t.recapCols, j])].sort() : t.recapCols.filter((x) => x !== j); touch(); }, c || 'Kolom ' + (j + 1)))); });
+      body.append(rc);
+      body.append(h('div', { style: { margin: '6px 0' } }, check(t.hideSrc !== false, (v) => { t.hideSrc = v; touch(); }, 'Sembunyikan data sumbernya dari "Data lainnya"')));
       body.append(h('div', { style: { margin: '6px 0' } }, check(t.hideEmpty !== false, (v) => { t.hideEmpty = v; touch(); }, 'Sembunyikan baris yang nilainya kosong')));
       body.append(h('h4', {}, 'Warna otomatis menurut isi sel'));
       body.append(h('div', { class: 'mut small' }, 'Jika isi sel sama dengan kata di bawah (mis. R, D, O, T), sel diberi warna ini.'));
@@ -249,6 +375,7 @@ function openEditor(t, done) {
         body.append(frow('Awalan JJG', textInput(s.jjg, (v) => { s.jjg = v; touch(); }, { placeholder: 'mis. JJG BBC 2026' })));
       };
       body.append(h('div', { class: 'mut small' }, 'Awalan = nama kolom tanpa bulan. Kolom "Ton Act 2026_01" … "_12" dibaca sebagai awalan "Ton Act 2026".'));
+      body.append(h('div', { style: { margin: '6px 0' } }, check(t.hideSrc !== false, (v) => { t.hideSrc = v; touch(); }, 'Sembunyikan data sumbernya dari "Data lainnya"')));
       side('Sisi kiri (pembanding / plan)', t.left);
       side('Sisi kanan (aktual)', t.right);
       body.append(h('h4', {}, 'Pembagi'));
@@ -351,5 +478,26 @@ export function recapTable(t, groups, from, to) {
   for (const g of groups) line(g.name, g.blocks, false);
   if (groups.length > 1) line('Total', groups.flatMap((g) => g.blocks), true);
   return { el: h('div', { class: 'tblwrap recap' }, h('table', { class: 'itab' }, thead, body)), rows: all, keys, pk };
+}
+export const recapGridTables = (th) => (th.tables || []).filter((x) => x.kind === 'grid' && x.enabled !== false && (x.recapCols || []).length);
+// groups: [{name, blocks:[{row}]}] -> tabel: baris = wilayah, kolom = (kolom terpilih x baris tabel)
+export function recapGrid(t, groups) {
+  const cols = (t.recapCols || []).filter((j) => j > 0 && j < (t.cols || []).length);
+  const rowsT = (t.rows || []).filter((r) => String(r[0] || '').trim() !== '');
+  if (!cols.length || !rowsT.length) return null;
+  const bg = t.color || '#0b5d3b', fg = contrast(bg);
+  const th = (txt, span, st) => h('th', { colspan: span || 1, style: { background: bg, color: fg, ...(st || {}) } }, txt);
+  const thead = h('thead', {}, h('tr', {}, th('', 1, { position: 'sticky', left: 0, zIndex: 2 }), ...cols.map((j) => th(t.cols[j], rowsT.length))),
+    h('tr', {}, th('Wilayah', 1, { position: 'sticky', left: 0, zIndex: 2 }), ...cols.flatMap(() => rowsT.map((r) => th(r[0])))));
+  const body = h('tbody', {}); let any = false;
+  const line = (name, blocks, total) => {
+    const cells = [h('td', { class: 'lft stick' + (total ? ' tot' : '') }, name)]; let has = false;
+    for (const j of cols) for (const r of rowsT) { const v = fillTplSum(r[j] || '', blocks); if (v !== '') has = true; cells.push(h('td', {}, v)); }
+    if (!has) return;
+    any = true; body.append(h('tr', { class: total ? 'tot' : '' }, cells));
+  };
+  for (const g of groups) line(g.name, g.blocks, false);
+  if (groups.length > 1) line('Total', groups.flatMap((g) => g.blocks), true);
+  return any ? h('div', { class: 'tblwrap recap' }, h('table', { class: 'itab' }, thead, body)) : null;
 }
 void theme; void toast;
