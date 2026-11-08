@@ -185,3 +185,14 @@ a.btn{display:inline-flex;align-items:center;color:var(--tx)}
 .loginbox input{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font:inherit;background:var(--card);color:var(--tx)}
 .loginmsg{color:var(--warn);font-size:13px;min-height:1em}
 .btn.block{width:100%}
+.itab{border-collapse:collapse;width:100%;font-size:13px}
+.itab th{padding:6px 8px;text-align:center;font-weight:700;border:1px solid var(--line)}
+.itab td{padding:5px 8px;text-align:center;border:1px solid var(--line)}
+.itab td.lft{text-align:left;font-weight:600}
+.perrow{display:flex;align-items:center;gap:6px;margin:4px 0 8px;flex-wrap:wrap}
+.perrow select{width:auto;padding:4px 6px}
+.lrow{display:flex;gap:6px;align-items:center;margin:4px 0}.lrow>:first-child{flex:1;min-width:0}
+.cellrow{display:flex;gap:6px}.cellrow>*{flex:1;min-width:0}.cellrow input[type=color]{flex:0 0 48px}
+.chk2>div{display:flex;gap:18px;align-items:center}
+.prevbox{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
+h4{margin:12px 0 4px;font-size:13px}

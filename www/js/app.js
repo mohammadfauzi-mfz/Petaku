@@ -14,6 +14,7 @@ import { checkUpdate, BUILD } from './update.js';
 import { petaku } from './native.js';
 import { base64ToBytes, applyUiMode } from './util.js';
 import { requireLogin, backgroundCheck } from './auth.js';
+import { PRESETS } from './ui-tables.js';
 applyUiMode();
 try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyUiMode); } catch (e) { /* abaikan */ }
 
@@ -78,6 +79,8 @@ async function startupChecks() {
 async function boot() {
   await init();
   await requireLogin();
+  // tema lama belum punya tabel info: isi tabel bawaan (aman, tabel tanpa data otomatis tersembunyi)
+  for (const t of S.themes) if (t.tables === undefined) t.tables = [PRESETS.lsu(), PRESETS.plan26(), PRESETS.yoy()];
   fillThemeSel();
   initMap();
   $('#themeSel').addEventListener('change', (e) => { S.themeId = e.target.value; bump('theme'); if (page !== 'map') renderers[page] && renderers[page](); });

@@ -1,4 +1,5 @@
 // Kartu info blok yang rapi: header, angka utama, grup detail dengan grafik mini
+import { buildTables } from './ui-tables.js';
 import { S, theme, getProp, getField } from './model.js';
 import { h, num, toast } from './util.js';
 
@@ -197,6 +198,8 @@ export function buildBlockCard(layer, feat) {
       grid.append(h('div', { class: 'mt' + (hl ? ' hl' : ''), style: hl ? { background: ci.color, color: contrast(ci.color) } : null }, h('small', {}, c), h('b', {}, String(v).trim())));
     }
     if (nm) card.append(grid);
+
+    for (const tb of buildTables(th, row, props)) card.append(tb);
 
     // detail
     const others = S.ds.headers.filter((c) => !used.has(c) && !HIDE_EMPTY(row[c]));
