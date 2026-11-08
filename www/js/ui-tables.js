@@ -300,4 +300,56 @@ export function tablesBody(t, rerender) {
     h('button', { class: 'btn', onclick: () => { const n = PRESETS[pick](); t.tables.push(n); bump('style'); rerender(); openEditor(n, rerender); } }, 'Tambah'))));
   return box;
 }
+
+// ---- rekap Plan vs Act per kelompok (mis. per afdeling): jumlahkan blok lalu hitung ulang rasio ----
+export const compareTables = (th) => (th.tables || []).filter((x) => x.kind === 'compare' && x.enabled !== false);
+function aggSide(rowsData, from, to) {
+  let ton = null, jjg = null, luas = 0, pkk = 0;
+  for (const b of rowsData) {
+    const t = sumRange(b.ton, from, to), j = sumRange(b.jjg, from, to);
+    if (t == null && j == null) continue;
+    if (t != null) ton = (ton || 0) + t;
+    if (j != null) jjg = (jjg || 0) + j;
+    luas += b.luas || 0; pkk += b.pkk || 0;
+  }
+  return { ton, jjg, tonha: ton != null && luas ? ton / luas : null, jjgpkk: jjg != null && pkk ? jjg / pkk : null, bjr: ton != null && jjg ? ton * 1000 / jjg : null };
+}
+// blocks: [{row}]; kembalikan {a, b, from, to} untuk satu kelompok
+export function aggCompare(t, blocks, from, to) {
+  const mk = (s) => blocks.map((x) => ({ ton: series(x.row, s.ton), jjg: series(x.row, s.jjg), luas: numT(getField(x.row, t.luas)), pkk: numT(getField(x.row, t.pkk)) }));
+  const L = mk(t.left), R = mk(t.right);
+  return { a: aggSide(L, from, to), b: aggSide(R, from, to) };
+}
+export function autoTo(t, blocks) {
+  let m = 0; for (const x of blocks) { const r = series(x.row, t.right.ton) || series(x.row, t.right.jjg); m = Math.max(m, lastMonth(r)); }
+  return m || 12;
+}
+// groups: [{name, blocks}]; tabel lebar (geser ke samping), kolom pertama menempel
+export function recapTable(t, groups, from, to) {
+  const keys = (t.metrics || []).filter((k) => METRIC[k]);
+  const pk = keys.filter((k) => (t.pct || []).includes(k));
+  const bg = t.color || '#0b5d3b', fg = contrast(bg);
+  const th = (txt, span, st) => h('th', { colspan: span || 1, style: { background: bg, color: fg, ...(st || {}) } }, txt);
+  const thead = h('thead', {}, h('tr', {}, th('', 1, { position: 'sticky', left: 0, zIndex: 2 }), th(t.left.label, keys.length), th(t.right.label, keys.length), pk.length ? th('%', pk.length) : null),
+    h('tr', {}, th('Wilayah', 1, { position: 'sticky', left: 0, zIndex: 2 }), ...keys.map((k) => th(METRIC[k].label)), ...keys.map((k) => th(METRIC[k].label)), ...pk.map((k) => th(METRIC[k].label))));
+  const body = h('tbody', {});
+  const all = [];
+  const line = (name, blocks, total) => {
+    const { a, b } = aggCompare(t, blocks, from, to);
+    if (keys.every((k) => a[k] == null && b[k] == null)) return;
+    const cells = [h('td', { class: 'lft stick' + (total ? ' tot' : '') }, name)];
+    for (const k of keys) cells.push(h('td', {}, fmtN(a[k], METRIC[k].dec)));
+    for (const k of keys) cells.push(h('td', {}, fmtN(b[k], METRIC[k].dec)));
+    for (const k of pk) {
+      const pct = a[k] && b[k] != null ? b[k] / a[k] * 100 : null;
+      const c = rangeColor(t, pct);
+      cells.push(h('td', { style: c ? { background: c, color: contrast(c), fontWeight: 700 } : { fontWeight: 700 } }, pct == null ? '' : Math.round(pct) + '%'));
+    }
+    body.append(h('tr', { class: total ? 'tot' : '' }, cells));
+    all.push({ name, a, b, pct: Object.fromEntries(pk.map((k) => [k, a[k] && b[k] != null ? b[k] / a[k] * 100 : null])) });
+  };
+  for (const g of groups) line(g.name, g.blocks, false);
+  if (groups.length > 1) line('Total', groups.flatMap((g) => g.blocks), true);
+  return { el: h('div', { class: 'tblwrap recap' }, h('table', { class: 'itab' }, thead, body)), rows: all, keys, pk };
+}
 void theme; void toast;

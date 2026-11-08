@@ -196,3 +196,7 @@ a.btn{display:inline-flex;align-items:center;color:var(--tx)}
 .chk2>div{display:flex;gap:18px;align-items:center}
 .prevbox{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
 h4{margin:12px 0 4px;font-size:13px}
+.recap{overflow-x:auto}.recap .itab{width:max-content;min-width:100%;font-size:12.5px}
+.recap td.stick{position:sticky;left:0;background:var(--card);z-index:1;white-space:nowrap}
+.recap tr.tot td{background:#fff200;font-weight:800;color:#000}.recap tr.tot td.stick{background:#fff200}
+.recap .itab th,.recap .itab td{white-space:nowrap}

@@ -2,6 +2,7 @@
 import { S, theme, getField, getProp, computeStats, filterActive, filterSummary, ensureStyles } from './model.js';
 import { h, num, select, toast } from './util.js';
 import { openSheet } from './ui-common.js';
+import { compareTables, recapTable, autoTo } from './ui-tables.js';
 
 const fmt = (v) => { if (v == null || !isFinite(v)) return '–'; const a = Math.abs(v); return a >= 100 ? String(Math.round(v)) : a >= 10 ? String(Math.round(v * 10) / 10).replace('.', ',') : String(Math.round(v * 100) / 100).replace('.', ','); };
 const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
@@ -20,6 +21,7 @@ function collect() {
       const cls = f._style && f._style.ci >= 0 ? t.classes[f._style.ci] : null;
       out.push({
         code: String(getProp(f.props, l.keyField) || ''), estate: String(getProp(f.props, 'Estate') || '–'), afd: String(getProp(f.props, 'Afdeling') || '–'),
+        row: f._row, props: f.props,
         v: v == null ? null : v * sc, raw: String(raw == null ? '' : raw).trim(), ci: f._style ? f._style.ci : -1, color: cls ? cls.color : '#cfd6d2',
       });
     }
@@ -27,7 +29,7 @@ function collect() {
   return out;
 }
 
-function textReport(t, items, numeric, groupBy, groups, lows, highs, topN) {
+function textReport(t, items, numeric, groupBy, groups, lows, highs, topN, recap) {
   const L = [];
   L.push(`*${(t.title || t.name).split('\n').join(' ')}*`);
   if (filterActive(t)) L.push('Filter: ' + filterSummary(t));
@@ -43,6 +45,11 @@ function textReport(t, items, numeric, groupBy, groups, lows, highs, topN) {
     const m = new Map(); for (const x of items) m.set(x.raw || '(kosong)', (m.get(x.raw || '(kosong)') || 0) + 1);
     for (const [k, n] of [...m].sort((a, b) => b[1] - a[1])) L.push(`${k}: ${n} blok`);
   }
+  if (recap && recap.rows.length) {
+    L.push('', `*${recap.title}* (${recap.per})`);
+    const f2 = (v, d) => (v == null ? '–' : v.toFixed(d));
+    for (const r of recap.rows) L.push(`${r.name}: TON/HA ${recap.ct.right.label} ${f2(r.b.tonha, 2)} · ${recap.ct.left.label} ${f2(r.a.tonha, 2)}` + (r.pct.tonha != null ? ` (${Math.round(r.pct.tonha)}%)` : '') + (r.pct.bjr != null ? ` · BJR ${Math.round(r.pct.bjr)}%` : ''));
+  }
   L.push('', '_Petaku_');
   return L.join('\n');
 }
@@ -53,7 +60,9 @@ export function openSummary() {
   const body = h('div', {});
   if (!items.length) { openSheet('Ringkasan', h('div', { class: 'hint' }, 'Belum ada blok berdata. Impor CSV dan pastikan kolom data tema sudah dipilih.')); return; }
   const numeric = t.mode !== 'category' && items.some((x) => x.v != null);
-  let groupBy = 'afd', sortBy = 'avgdesc', topN = 10;
+  let groupBy = 'afd', sortBy = 'avgdesc', topN = 10, recapId = '', rFrom = 1, rTo = 'auto';
+  const MLAB = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  let recapRows = null;
 
   const render = () => {
     body.innerHTML = '';
@@ -106,7 +115,29 @@ export function openSummary() {
       body.append(rc);
     }
 
-    const txt = textReport(t, items, numeric, groupBy, groups, lows, highs, topN);
+    // rekap Plan vs Act per wilayah (memakai tabel perbandingan di tema)
+    recapRows = null;
+    const cts = compareTables(t);
+    if (cts.length) {
+      if (!cts.some((x) => x.id === recapId)) { recapId = cts[0].id; rFrom = cts[0].from || 1; rTo = cts[0].to == null ? 'auto' : cts[0].to; }
+      const ct = cts.find((x) => x.id === recapId);
+      const rc2 = h('div', { class: 'card' }, h('h3', {}, 'Rekap ' + (groupBy === 'estate' ? 'per Estate' : 'per Afdeling')));
+      rc2.append(h('div', { class: 'row' }, h('label', {}, 'Tabel'), h('div', { class: 'grow' }, select(cts.map((x) => [x.id, x.title]), recapId, (v) => { recapId = v; const c = cts.find((x) => x.id === v); rFrom = c.from || 1; rTo = c.to == null ? 'auto' : c.to; render(); }))));
+      const mo = MLAB.map((m, i) => [i + 1, m]);
+      const blocksAll = items.filter((x) => x.row).map((x) => ({ row: x.row, g: groupBy === 'estate' ? x.estate : x.afd }));
+      const toN = rTo === 'auto' ? autoTo(ct, blocksAll) : +rTo;
+      rc2.append(h('div', { class: 'perrow' }, h('span', { class: 'mut small' }, 'Periode'), select(mo, rFrom, (v) => { rFrom = +v; render(); }), h('span', { class: 'mut small' }, 's/d'), select(mo, toN, (v) => { rTo = +v; render(); }),
+        h('button', { class: 'btn sec sm', onclick: () => { rFrom = ct.from || 1; rTo = ct.to == null ? 'auto' : ct.to; render(); } }, 'Otomatis')));
+      const gm = new Map();
+      for (const x of blocksAll) { if (!gm.has(x.g)) gm.set(x.g, []); gm.get(x.g).push({ row: x.row }); }
+      const gl = [...gm].map(([name, blocks]) => ({ name, blocks })).sort((a, b) => a.name.localeCompare(b.name, 'id', { numeric: true }));
+      const rt = recapTable(ct, gl, rFrom, toN);
+      recapRows = { title: ct.title, per: `${MLAB[rFrom - 1]}–${MLAB[toN - 1]}`, ct, ...rt };
+      rc2.append(h('div', { class: 'mut small' }, `Periode ${MLAB[rFrom - 1]}–${MLAB[toN - 1]}. Jumlah blok dijumlahkan dulu, lalu TON/HA, JJG/PKK, dan BJR dihitung ulang dari totalnya (bukan rata-rata antar blok).`), rt.el);
+      body.append(rc2);
+    }
+
+    const txt = textReport(t, items, numeric, groupBy, groups, lows, highs, topN, recapRows);
     body.append(h('div', { class: 'btns' },
       h('a', { class: 'btn', href: 'https://wa.me/?text=' + encodeURIComponent(txt), target: '_blank', rel: 'noopener', style: { textDecoration: 'none' } }, 'Kirim WhatsApp'),
       h('button', { class: 'btn sec', onclick: async () => { try { await navigator.clipboard.writeText(txt); toast('Ringkasan disalin'); } catch (e) { toast('Gagal menyalin'); } } }, 'Salin teks')));
