@@ -188,6 +188,7 @@ export function buildBlockCard(layer, feat) {
     const first = th.field && S.ds && S.ds.hmap[String(th.field).toLowerCase().trim()];
     if (first) mcols.push(first);
     for (const m of METRICS) { const c = S.ds.hmap[m.toLowerCase()]; if (c && !mcols.includes(c)) mcols.push(c); }
+    for (const tb of buildTables(th, row, props, 'top')) card.append(tb);
     const grid = h('div', { class: 'ic-grid' });
     let nm = 0;
     for (const c of mcols) {
@@ -199,7 +200,7 @@ export function buildBlockCard(layer, feat) {
     }
     if (nm) card.append(grid);
 
-    for (const tb of buildTables(th, row, props)) card.append(tb);
+    for (const tb of buildTables(th, row, props, 'rest')) card.append(tb);
 
     // detail
     const others = S.ds.headers.filter((c) => !used.has(c) && !HIDE_EMPTY(row[c]));

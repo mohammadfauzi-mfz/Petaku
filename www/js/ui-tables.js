@@ -253,11 +253,12 @@ export function tableSourceCols(th, headers) {
   }
   return out;
 }
-export function buildTables(th, row, props) {
+export function buildTables(th, row, props, where) {
   const out = [];
   if (!row) return out;
   for (const t of th.tables || []) {
     if (t.enabled === false) continue;
+    if (where && (where === 'top') !== !!t.top) continue;
     let body = null;
     try { body = buildTable(t, row, props); } catch (e) { console.error(e); }
     if (!body) continue;
@@ -361,7 +362,7 @@ function openEditor(t, done) {
       const rc = h('div', { class: 'chk2' });
       t.cols.forEach((c, j) => { if (j > 0) rc.append(h('div', {}, check(t.recapCols.includes(j), (v) => { t.recapCols = v ? [...new Set([...t.recapCols, j])].sort() : t.recapCols.filter((x) => x !== j); touch(); }, c || 'Kolom ' + (j + 1)))); });
       body.append(rc);
-      body.append(h('div', { style: { margin: '6px 0' } }, check(t.hideSrc !== false, (v) => { t.hideSrc = v; touch(); }, 'Sembunyikan data sumbernya dari "Data lainnya"')));
+      body.append(h('div', { style: { margin: '6px 0' } }, check(t.hideSrc !== false, (v) => { t.hideSrc = v; touch(); }, 'Sembunyikan data sumbernya dari "Data lainnya"')), h('div', { style: { margin: '6px 0' } }, check(!!t.top, (v) => { t.top = v; touch(); }, 'Tampilkan paling atas (di atas kotak ringkasan)')));
       body.append(h('div', { style: { margin: '6px 0' } }, check(t.hideEmpty !== false, (v) => { t.hideEmpty = v; touch(); }, 'Sembunyikan baris yang nilainya kosong')));
       body.append(h('h4', {}, 'Warna otomatis menurut isi sel'));
       body.append(h('div', { class: 'mut small' }, 'Jika isi sel sama dengan kata di bawah (mis. R, D, O, T), sel diberi warna ini.'));
@@ -375,7 +376,7 @@ function openEditor(t, done) {
         body.append(frow('Awalan JJG', textInput(s.jjg, (v) => { s.jjg = v; touch(); }, { placeholder: 'mis. JJG BBC 2026' })));
       };
       body.append(h('div', { class: 'mut small' }, 'Awalan = nama kolom tanpa bulan. Kolom "Ton Act 2026_01" … "_12" dibaca sebagai awalan "Ton Act 2026".'));
-      body.append(h('div', { style: { margin: '6px 0' } }, check(t.hideSrc !== false, (v) => { t.hideSrc = v; touch(); }, 'Sembunyikan data sumbernya dari "Data lainnya"')));
+      body.append(h('div', { style: { margin: '6px 0' } }, check(t.hideSrc !== false, (v) => { t.hideSrc = v; touch(); }, 'Sembunyikan data sumbernya dari "Data lainnya"')), h('div', { style: { margin: '6px 0' } }, check(!!t.top, (v) => { t.top = v; touch(); }, 'Tampilkan paling atas (di atas kotak ringkasan)')));
       side('Sisi kiri (pembanding / plan)', t.left);
       side('Sisi kanan (aktual)', t.right);
       body.append(h('h4', {}, 'Pembagi'));
@@ -409,9 +410,12 @@ export function tablesBody(t, rerender) {
   t.tables = t.tables || [];
   const box = h('div', {});
   box.append(h('div', { class: 'mut small' }, 'Tabel yang tampil di info lokasi saat blok diketuk. Isinya diambil dari kolom CSV.'));
-  for (const tb of t.tables) {
+  t.tables.forEach((tb, ti) => {
+    const mv = (d) => { const j = ti + d; if (j < 0 || j >= t.tables.length) return; [t.tables[ti], t.tables[j]] = [t.tables[j], t.tables[ti]]; bump('style'); rerender(); };
     box.append(h('div', { class: 'themeItem' },
       h('span', { class: 'nm' }, (tb.enabled === false ? '○ ' : '● ') + (tb.title || 'Tabel') + (tb.kind === 'compare' ? '  · Plan vs Act' : '')),
+      h('button', { class: 'btn sec sm', title: 'Naikkan', disabled: ti === 0, onclick: () => mv(-1) }, '↑'),
+      h('button', { class: 'btn sec sm', title: 'Turunkan', disabled: ti === t.tables.length - 1, onclick: () => mv(1) }, '↓'),
       h('button', { class: 'btn sec sm', onclick: () => { tb.enabled = tb.enabled === false; bump('style'); rerender(); } }, tb.enabled === false ? 'Aktifkan' : 'Matikan'),
       h('button', { class: 'btn sec sm', onclick: () => openEditor(tb, rerender) }, 'Ubah'),
       S.themes.length > 1 ? h('button', { class: 'btn sec sm', title: 'Salin ke semua tema lain', onclick: () => {
@@ -420,7 +424,7 @@ export function tablesBody(t, rerender) {
         bump('style'); toast(n ? `Disalin ke ${n} tema` : 'Sudah ada di semua tema');
       } }, 'Ke semua') : null,
       h('button', { class: 'btn red sm', onclick: async () => { if (!await confirmBox(`Hapus tabel "${tb.title}"?`, 'Hapus')) return; t.tables = t.tables.filter((x) => x !== tb); bump('style'); rerender(); } }, 'Hapus')));
-  }
+  });
   let pick = 'lsu';
   box.append(h('div', { class: 'row' }, h('label', {}, 'Tambah dari'), h('div', { class: 'grow', style: { display: 'flex', gap: '8px' } },
     select(PRESET_LABEL, pick, (v) => { pick = v; }),
