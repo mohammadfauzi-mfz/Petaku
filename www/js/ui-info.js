@@ -228,6 +228,6 @@ export function buildBlockCard(layer, feat) {
   const txt = summaryText(layer, feat);
   card.append(h('div', { class: 'ic-act' },
     h('button', { class: 'btn sec sm', onclick: () => copy(txt) }, 'Salin'),
-    h('a', { class: 'btn sec sm', href: 'https://wa.me/?text=' + encodeURIComponent(txt), target: '_blank', rel: 'noopener', style: { textDecoration: 'none' } }, 'Kirim WhatsApp')));
+    h('button', { class: 'btn sec sm', onclick: () => import('./ui-share.js').then((m) => m.openShare(layer, feat)) }, 'Bagikan…')));
   return card;
 }
