@@ -46,7 +46,15 @@ jobs:
 
       - name: Build APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          # unduhan Gradle kadang timeout di runner: perpanjang timeout, pakai distribusi -bin, dan ulangi sampai 4x
+          sed -i 's/-all\.zip/-bin.zip/' gradle/wrapper/gradle-wrapper.properties
+          if grep -q '^networkTimeout' gradle/wrapper/gradle-wrapper.properties; then sed -i 's/^networkTimeout=.*/networkTimeout=180000/' gradle/wrapper/gradle-wrapper.properties; else echo 'networkTimeout=180000' >> gradle/wrapper/gradle-wrapper.properties; fi
+          for i in 1 2 3 4; do
+            ./gradlew assembleDebug --no-daemon && exit 0
+            echo "Percobaan $i gagal, mengulang dalam 30 detik..."; sleep 30
+          done
+          exit 1
 
       - name: Siapkan APK
         run: cp android/app/build/outputs/apk/debug/app-debug.apk Petaku.apk
