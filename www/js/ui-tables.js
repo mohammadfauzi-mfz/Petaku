@@ -316,9 +316,12 @@ function sampleFeat() {
 }
 function headers() { return S.ds ? S.ds.headers : []; }
 
-function listEditor(arr, mk, draw, rowEd) {
+function listEditor(arr, mk, draw, rowEd, onMove) {
   const box = h('div', {});
-  arr.forEach((it, i) => box.append(h('div', { class: 'lrow' }, rowEd(it, i), h('button', { class: 'btn red sm', onclick: () => { arr.splice(i, 1); draw(); } }, '✕'))));
+  const mv = (i, d) => { const j = i + d; if (j < 0 || j >= arr.length) return; if (onMove) onMove(i, j); else [arr[i], arr[j]] = [arr[j], arr[i]]; draw(); };
+  arr.forEach((it, i) => box.append(h('div', { class: 'lrow' }, rowEd(it, i),
+    h('div', { class: 'mvb' }, h('button', { class: 'btn sec sm', disabled: i === 0, onclick: () => mv(i, -1) }, '↑'), h('button', { class: 'btn sec sm', disabled: i === arr.length - 1, onclick: () => mv(i, 1) }, '↓')),
+    h('button', { class: 'btn red sm', onclick: () => { arr.splice(i, 1); draw(); } }, '✕'))));
   box.append(h('button', { class: 'btn sec sm', onclick: () => { arr.push(mk()); draw(); } }, '+ Tambah'));
   return box;
 }
@@ -347,7 +350,11 @@ function openEditor(t, done) {
       body.append(h('div', { class: 'mut small' }, 'Isi sel: teks biasa, {NamaKolom}, {Kolom|2} (2 desimal), {@AtributPeta}. Diawali = untuk menghitung, mis. ={Pkk Awal}/{Luas}|1  atau  ={Act}/{Plan}|0%  (|n = n desimal, |n% = tampil persen).'));
       body.append(h('div', { class: 'mut small' }, 'Operator + - * / ^ ( ) dan fungsi ROUND, ABS, SQRT, SUM, AVG, MIN, MAX, IF(syarat; mis. IF({A}>100,1,0)). Kolom kosong atau pembagi 0 menghasilkan sel kosong.'));
       body.append(h('h4', {}, 'Kolom tabel'));
-      body.append(listEditor(t.cols, () => 'Kolom', () => { fixRows(); draw(); touch(); }, (c, i) => textInput(c, (v) => { t.cols[i] = v; touch(); })));
+      body.append(listEditor(t.cols, () => 'Kolom', () => { fixRows(); draw(); touch(); }, (c, i) => textInput(c, (v) => { t.cols[i] = v; touch(); }), (i, j) => {
+        [t.cols[i], t.cols[j]] = [t.cols[j], t.cols[i]];
+        t.rows.forEach((r) => { [r[i], r[j]] = [r[j], r[i]]; });
+        t.recapCols = (t.recapCols || []).map((x) => (x === i ? j : x === j ? i : x)).sort();
+      }));
       body.append(h('h4', {}, 'Baris'));
       const fixRows = () => { t.rows.forEach((r) => { while (r.length < t.cols.length) r.push(''); r.length = t.cols.length; }); };
       fixRows();

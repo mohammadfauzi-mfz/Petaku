@@ -192,6 +192,7 @@ a.btn{display:inline-flex;align-items:center;color:var(--tx)}
 .perrow{display:flex;align-items:center;gap:6px;margin:4px 0 8px;flex-wrap:wrap}
 .perrow select{width:auto;padding:4px 6px}
 .lrow{display:flex;gap:6px;align-items:center;margin:4px 0}.lrow>:first-child{flex:1;min-width:0}
+.mvb{display:flex;flex-direction:column;gap:2px}.mvb .btn{padding:2px 8px;min-height:0;line-height:1.1}.mvb .btn:disabled{opacity:.3}
 .cellrow{display:flex;gap:6px}.cellrow>*{flex:1;min-width:0}.cellrow input[type=color]{flex:0 0 48px}
 .chk2>div{display:flex;gap:18px;align-items:center}
 .prevbox{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
