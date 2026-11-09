@@ -83,11 +83,11 @@ export function buildBlockCard(layer, feat) {
     // detail
     const others = S.ds.headers.filter((c) => !used.has(c) && !HIDE_EMPTY(row[c]));
     const tsrc = tableSourceCols(th, S.ds.headers);
-    const avail = S.ds.headers.filter((c) => !used.has(c) && !tsrc.has(c));
+    const avail = S.ds.headers.filter((c) => !used.has(c));
     const ch = buildCharts(th, row, avail);
     for (const el of ch.els) card.append(el);
     const rest = ch.rest;
-    const rk = rest.filter((c) => !HIDE_EMPTY(row[c]));
+    const rk = rest.filter((c) => !tsrc.has(c) && !HIDE_EMPTY(row[c]));
     if (rk.length) {
       const kv = h('div', { class: 'kv' });
       for (const c of rk) kv.append(h('b', {}, c), h('span', {}, String(row[c]).trim()));
