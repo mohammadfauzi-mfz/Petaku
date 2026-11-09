@@ -2,6 +2,7 @@ import { S, theme, bump, defThemes, defRules, saveSoon, emit, getProp } from './
 import { PATTERNS } from './render.js';
 import { h, $, uid, clone, toast, select, pickFile, readText, readDataURL, shareFile } from './util.js';
 import { tablesBody } from './ui-tables.js';
+import { chartsBody } from './ui-charts.js';
 import { openSheet, confirmBox, textInput, numInput, colorInput, textArea, check, row } from './ui-common.js';
 
 const openKeys = new Set(['dasar', 'kelas']);
@@ -268,6 +269,7 @@ export function renderTheme() {
       h('button', { class: 'btn red sm', onclick: () => { t.legendImage = ''; touch(); rerender(); } }, 'Hapus')),
     h('div', { class: 'mut small' }, t.legendImage ? (t.legendImage.startsWith('asset:') ? 'Gambar bawaan dipakai' : 'Gambar sendiri dipakai') : 'Tidak ada gambar')];
   ed.append(section('tbl', 'Tabel info lokasi', tablesBody(t, rerender)));
+  ed.append(section('chr', 'Grafik info lokasi', chartsBody(t, rerender)));
   ed.append(section('img', 'Gambar legenda', ...imgKids));
   el.append(ed);
 }
