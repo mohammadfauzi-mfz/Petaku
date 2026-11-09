@@ -78,6 +78,12 @@ export function chartDescs(headers) {
 }
 // kolom kustom: "Ton Act 2026, Luas" -> tiap koma = kolom persis, atau awalan (semua kolom yang diawali teks itu)
 function customDesc(cfg, headers) {
+  if (cfg.mode === 'ratio') {
+    const { monthly } = splitMonthly(headers);
+    const f = (b) => monthly.find((g) => g.base === b);
+    const n = f(cfg.numBase), d = f(cfg.denBase);
+    return { key: cfg.key, type: 'ratio', title: cfg.title || 'Rasio bulanan', sub: ' per bulan', num: n ? n.yrs : null, den: d ? d.yrs : null, mult: cfg.mult == null || cfg.mult === '' ? 1 : +cfg.mult, custom: true };
+  }
   const items = [], seen = new Set();
   const toks = String(cfg.cols || '').split(/[,\n;]+/).map((x) => x.trim()).filter(Boolean);
   for (const tk of toks) {
@@ -218,12 +224,32 @@ function monthSets(yrs, row, cfg) {
   return { sets, cut };
 }
 
+function ratioSets(d, row, cfg) {
+  if (!d.num || !d.den) return { sets: [], cut: 0 };
+  const dm = new Map(d.den), g = (c) => { if (!c) return null; const r = getField(row, c); return HIDE_EMPTY(r) ? null : num(r); };
+  const yrs = [];
+  for (const [year, nm] of d.num) {
+    const dd = dm.get(year) || (dm.size === 1 ? [...dm.values()][0] : null); if (!dd) continue;
+    const mm = {}, vals = [];
+    for (let m = 1; m <= 12; m++) { const a = g(nm[m]), b = g(dd[m]); vals.push(a != null && b != null && b !== 0 ? a / b * d.mult : null); }
+    const nums = vals.filter((v) => v != null);
+    if (nums.length) yrs.push({ name: year || '', vals, avg: nums.reduce((x, y) => x + y, 0) / nums.length });
+    void mm;
+  }
+  yrs.sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  const cut = yrs.length > 4 ? yrs.length - 4 : 0;
+  const sets = yrs.slice(cut);
+  sets.forEach((x, i) => { x.color = YCOL[YCOL.length - sets.length + i]; });
+  if (sets.length && cfg.color) sets[sets.length - 1].color = cfg.color;
+  return { sets, cut };
+}
+
 // satu grafik -> elemen <details>, atau null jika tidak ada data
 export function renderChart(entry, row) {
   const cfg = entry.cfg || {}, d = entry.desc;
   let body = null;
-  if (d.type === 'month') {
-    const { sets, cut } = monthSets(d.yrs, row, cfg);
+  if (d.type === 'month' || d.type === 'ratio') {
+    const { sets, cut } = d.type === 'ratio' ? ratioSets(d, row, cfg) : monthSets(d.yrs, row, cfg);
     if (sets.length) body = colChart(MLAB, sets, cfg, cfg.kind === 'line' ? 'line' : 'vbar', { legend: true, avg: true, cut });
   } else {
     const items = d.items.filter((it) => !HIDE_EMPTY(getField(row, it.col)));
@@ -237,8 +263,8 @@ export function renderChart(entry, row) {
   }
   if (!body) return null;
   const title = cfg.title || d.title;
-  const nItems = d.type === 'month' ? 99 : d.items.length;
-  return h('details', { class: 'ic-sec', open: cfg.open != null ? cfg.open : nItems <= 6 || d.type === 'month' },
+  const nItems = d.type !== 'items' ? 99 : d.items.length;
+  return h('details', { class: 'ic-sec', open: cfg.open != null ? cfg.open : nItems <= 6 || d.type !== 'items' },
     h('summary', {}, title, h('small', {}, (d.sub || '') + (cfg.unit ? ' · ' + cfg.unit : ''))), body);
 }
 
@@ -312,22 +338,37 @@ function openChartEditor(t, entry, headers, done) {
     const el = e ? renderChart(e, row) : null;
     if (el) { el.open = true; prev.append(el); } else prev.append(h('div', { class: 'mut small' }, 'Grafik kosong untuk blok ini (kolom belum cocok / tanpa data).'));
   };
-  const c = cfg || {}, isM = entry.desc.type === 'month';
+  const c = cfg || {}, isM = entry.desc.type === 'month' || entry.desc.type === 'ratio';
   const draw = () => {
     body.innerHTML = '';
-    const cc = cfg || {};
+    const cc = cfg || {}, isMd = isM || cc.mode === 'ratio';
     body.append(h('datalist', { id: 'dl-ch' }, headers.map((x) => h('option', { value: x }))));
     body.append(frow('Judul', textInput(cc.title || '', (v) => { set('title', v.trim() ? v : ''); }, { placeholder: entry.desc.title })));
     if (entry.desc.custom) {
+      const bases = splitMonthly(headers).monthly.map((g) => [g.base, g.base || '(tanpa nama)']);
+      body.append(frow('Sumber', select([['cols', 'Kolom langsung dari CSV'], ['ratio', 'Hitung rasio dari data bulanan']], cc.mode || 'cols', (v) => {
+        const c2 = ensure(); if (v === 'ratio') { c2.mode = 'ratio'; c2.kind = 'vbar'; if (c2.mult == null) c2.mult = 1000; if (!c2.numBase && bases[0]) c2.numBase = bases[0][0]; if (!c2.denBase && bases[1]) c2.denBase = bases[1][0]; } else { delete c2.mode; c2.kind = 'hbar'; }
+        bump('style'); draw();
+      })));
+    }
+    if (entry.desc.custom && cc.mode === 'ratio') {
+      body.append(h('div', { class: 'mut small' }, 'Nilai per bulan = Pembilang ÷ Penyebut × Pengali, dihitung per tahun yang sama. Bulan yang penyebutnya kosong atau 0 dilewati.'));
+      if (!bases.length) body.append(h('div', { class: 'mut small' }, 'Belum ada data bulanan terdeteksi di CSV.'));
+      body.append(frow('Pembilang', select([['', '— pilih —'], ...bases], cc.numBase || '', (v) => { set('numBase', v); })));
+      body.append(frow('Penyebut', select([['', '— pilih —'], ...bases], cc.denBase || '', (v) => { set('denBase', v); })));
+      body.append(frow('Rumus siap pakai', select([['', '— pilih —'], ['1000', 'BJR (Ton × 1000 ÷ JJG)'], ['1', 'Rasio biasa (A ÷ B)'], ['100', 'Persen (A ÷ B × 100)']], '', (v) => { if (v) { set('mult', +v); if (v === '1000' && !cc.title) set('title', 'BJR'); draw(); } })));
+      body.append(frow('Pengali', numInput(cc.mult == null ? '' : cc.mult, (v) => { const n = parseFloat(String(v).replace(',', '.')); set('mult', isFinite(n) ? n : ''); }, { placeholder: '1000' })));
+    }
+    if (entry.desc.custom && cc.mode !== 'ratio') {
       body.append(h('div', { class: 'mut small' }, 'Kolom data: pisahkan dengan koma. Tulis nama kolom persis, atau awalan kolom (mis. "Ton Act 2026" mengambil semua kolom yang diawali itu). Label tiap batang = sisa nama setelah awalan.'));
       body.append(h('textarea', { rows: 2, style: { width: '100%' }, placeholder: 'Pkk Awal, Pkk Sensus, Pkk Produktif', oninput: (ev) => { set('cols', ev.target.value); } }, cc.cols || ''));
       body.lastChild.value = cc.cols || '';
     }
-    body.append(frow('Jenis', select(isM ? KIND_M : KIND_I, cc.kind || (isM ? 'vbar' : 'hbar'), (v) => { set('kind', v); })));
+    body.append(frow('Jenis', select(isMd ? KIND_M : KIND_I, cc.kind || (isMd ? 'vbar' : 'hbar'), (v) => { set('kind', v); })));
     body.append(frow('Satuan', textInput(cc.unit || '', (v) => { set('unit', v.trim() ? v : ''); }, { placeholder: 'mis. ton/ha' })));
     body.append(frow('Warna', h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, colorInput(cc.color || '#0b8f5a', (v) => { set('color', v); }),
       h('button', { class: 'btn sec sm', onclick: () => { set('color', ''); draw(); } }, 'Otomatis'),
-      h('span', { class: 'mut small' }, isM ? '(untuk tahun terbaru)' : ''))));
+      h('span', { class: 'mut small' }, isMd ? '(untuk tahun terbaru)' : ''))));
     body.append(frow('Sumbu', select(AXIS, cc.axis || 'auto', (v) => { set('axis', v === 'auto' ? '' : v); draw(); })));
     if (cc.axis === 'manual') {
       body.append(frow('Minimum', numInput(cc.min == null ? '' : cc.min, (v) => { const n = parseFloat(String(v).replace(',', '.')); set('min', isFinite(n) ? n : ''); }, { placeholder: 'otomatis' })));
@@ -335,7 +376,7 @@ function openChartEditor(t, entry, headers, done) {
     }
     body.append(h('div', { style: { margin: '6px 0' } }, check(cc.labels !== false, (v) => { set('labels', v ? '' : false); }, 'Tampilkan angka pada grafik')));
     body.append(frow('Desimal', numInput(cc.dec == null ? '' : cc.dec, (v) => { const n = parseInt(v, 10); set('dec', isFinite(n) && n >= 0 && n <= 4 ? n : ''); }, { placeholder: 'otomatis' })));
-    if (!isM) body.append(h('div', { style: { margin: '6px 0' } }, check(cc.trend !== false, (v) => { set('trend', v ? '' : false); }, 'Tampilkan panah naik/turun (▲▼) untuk batang mendatar')));
+    if (!isMd) body.append(h('div', { style: { margin: '6px 0' } }, check(cc.trend !== false, (v) => { set('trend', v ? '' : false); }, 'Tampilkan panah naik/turun (▲▼) untuk batang mendatar')));
     body.append(frow('Garis target', numInput(cc.target == null ? '' : cc.target, (v) => { const n = parseFloat(String(v).replace(',', '.')); set('target', isFinite(n) ? n : ''); }, { placeholder: 'kosong = tanpa garis' })));
     body.append(h('div', { style: { margin: '6px 0' } }, check(cc.open !== false && cc.open != null ? cc.open : false, (v) => { set('open', v ? true : ''); }, 'Selalu terbuka (tidak dilipat)')));
     body.append(prev);
