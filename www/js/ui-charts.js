@@ -344,8 +344,8 @@ function openChartEditor(t, entry, headers, done) {
     const cc = cfg || {}, isMd = isM || cc.mode === 'ratio';
     body.append(h('datalist', { id: 'dl-ch' }, headers.map((x) => h('option', { value: x }))));
     body.append(frow('Judul', textInput(cc.title || '', (v) => { set('title', v.trim() ? v : ''); }, { placeholder: entry.desc.title })));
+    const bases = splitMonthly(headers).monthly.map((g) => [g.base, g.base || '(tanpa nama)']);
     if (entry.desc.custom) {
-      const bases = splitMonthly(headers).monthly.map((g) => [g.base, g.base || '(tanpa nama)']);
       body.append(frow('Sumber', select([['cols', 'Kolom langsung dari CSV'], ['ratio', 'Hitung rasio dari data bulanan']], cc.mode || 'cols', (v) => {
         const c2 = ensure(); if (v === 'ratio') { c2.mode = 'ratio'; c2.kind = 'vbar'; if (c2.mult == null) c2.mult = 1000; if (!c2.numBase && bases[0]) c2.numBase = bases[0][0]; if (!c2.denBase && bases[1]) c2.denBase = bases[1][0]; } else { delete c2.mode; c2.kind = 'hbar'; }
         bump('style'); draw();
