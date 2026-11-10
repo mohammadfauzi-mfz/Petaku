@@ -118,6 +118,17 @@ function templateSheet(rerender) {
   const close = openSheet('Tema dari template', body, {});
 }
 
+// salin aturan ke semua tema lain (id sama = ditimpa, belum ada = ditambah)
+function copyRules(t, rules) {
+  let n = 0;
+  for (const x of S.themes) {
+    if (x === t) continue;
+    x.rules = x.rules || [];
+    for (const r of rules) { const cp = clone(r); const at = x.rules.findIndex((y) => y.id === cp.id); if (at >= 0) x.rules[at] = cp; else x.rules.push(cp); }
+    n++;
+  }
+  touch(); toast(n ? `${rules.length} aturan disalin ke ${n} tema` : 'Tidak ada tema lain');
+}
 function ruleEditor(t, r, i) {
   const wrap = h('div', { class: 'rule' });
   wrap.append(h('div', { class: 'r1' },
@@ -154,7 +165,8 @@ function ruleEditor(t, r, i) {
     textInput(r.legendGroup, (v) => { r.legendGroup = v; touch(); }, { placeholder: 'Grup' }),
     textInput(r.legendLabel, (v) => { r.legendLabel = v; touch(); }, { placeholder: 'Teks' }),
     h('button', { class: 'btn sec sm', onclick: () => { if (i > 0) { [t.rules[i - 1], t.rules[i]] = [t.rules[i], t.rules[i - 1]]; touch(); rerender(); } } }, '↑'),
-    h('button', { class: 'btn sec sm', onclick: () => { if (i < t.rules.length - 1) { [t.rules[i + 1], t.rules[i]] = [t.rules[i], t.rules[i + 1]]; touch(); rerender(); } } }, '↓')));
+    h('button', { class: 'btn sec sm', onclick: () => { if (i < t.rules.length - 1) { [t.rules[i + 1], t.rules[i]] = [t.rules[i], t.rules[i + 1]]; touch(); rerender(); } } }, '↓'),
+    S.themes.length > 1 ? h('button', { class: 'btn sec sm', title: 'Salin aturan ini ke semua tema lain', onclick: () => copyRules(t, [r]) }, 'Ke semua tema') : null));
   return wrap;
 }
 
@@ -247,7 +259,7 @@ export function renderTheme() {
 
   const ruleKids = [h('div', { class: 'mut small' }, 'Aturan dicek lebih dulu sebelum kelas warna; aturan pertama yang cocok dipakai. Contoh bawaan: poligon berakhiran R dan Status “Tuntas” diarsir hijau, Yld kosong dikosongkan.')];
   (t.rules || []).forEach((r, i) => ruleKids.push(ruleEditor(t, r, i)));
-  ruleKids.push(h('div', { class: 'btns' }, h('button', { class: 'btn sec sm', onclick: () => { t.rules = t.rules || []; t.rules.push({ id: 'r' + uid(), enabled: true, source: 'csv', field: 'Status', op: 'equals', value: '', fill: '#ffffff', pattern: 'diag', pc: '#000000', legendShow: true, legendGroup: 'Keterangan', legendLabel: 'Aturan baru' }); touch(); rerender(); } }, '+ Aturan')));
+  ruleKids.push(h('div', { class: 'btns' }, h('button', { class: 'btn sec sm', onclick: () => { t.rules = t.rules || []; t.rules.push({ id: 'r' + uid(), enabled: true, source: 'csv', field: 'Status', op: 'equals', value: '', fill: '#ffffff', pattern: 'diag', pc: '#000000', legendShow: true, legendGroup: 'Keterangan', legendLabel: 'Aturan baru' }); touch(); rerender(); } }, '+ Aturan'), S.themes.length > 1 && (t.rules || []).length ? h('button', { class: 'btn sec sm', onclick: () => copyRules(t, t.rules) }, 'Salin semua aturan ke semua tema') : null));
   ed.append(section('aturan', `Aturan khusus / arsiran (${(t.rules || []).length})`, ...ruleKids));
 
   const L = t.label;
