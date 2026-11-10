@@ -3,6 +3,14 @@ import { S, getField, bump } from './model.js';
 import { h, num, uid, select, toast } from './util.js';
 import { openSheet, confirmBox, textInput, numInput, colorInput, check, row as frow } from './ui-common.js';
 
+// angka CSV: "3,449" = 3449 (ribuan), "15,60" = 15.6 (desimal koma)
+function numT(x) {
+  if (x == null) return null;
+  if (typeof x === 'number') return isFinite(x) ? x : null;
+  const t = String(x).trim();
+  if (/^-?\d{1,3}(,\d{3})+(\.\d+)?$/.test(t)) return parseFloat(t.replace(/,/g, ''));
+  return num(t);
+}
 const HIDE_EMPTY = (v) => { const s = String(v == null ? '' : v).trim(); return s === '' || s === '-' || s.startsWith('#'); };
 
 // ---------- data bulanan ----------
@@ -131,7 +139,7 @@ function scale(nums, cfg, nonZeroDef) {
 
 // batang horizontal (satu seri)
 function hbarChart(items, row, cfg) {
-  let vals = items.map((it) => ({ tag: it.tag, raw: getField(row, it.col), v: num(getField(row, it.col)) })).filter((x) => !HIDE_EMPTY(x.raw));
+  let vals = items.map((it) => ({ tag: it.tag, raw: getField(row, it.col), v: numT(getField(row, it.col)) })).filter((x) => !HIDE_EMPTY(x.raw));
   if (!vals.length) return null;
   const nums = vals.map((x) => x.v).filter((v) => v != null);
   const { lo, hi } = nums.length ? scale(nums, cfg, false) : { lo: 0, hi: 1 };
@@ -213,7 +221,7 @@ function colChart(labels, sets, cfg, kind, opt) {
 function monthSets(yrs, row, cfg) {
   let sets = [];
   for (const [year, mm] of yrs) {
-    const vals = []; for (let m = 1; m <= 12; m++) { const c = mm[m]; const raw = c ? getField(row, c) : null; vals.push(c && !HIDE_EMPTY(raw) ? num(raw) : null); }
+    const vals = []; for (let m = 1; m <= 12; m++) { const c = mm[m]; const raw = c ? getField(row, c) : null; vals.push(c && !HIDE_EMPTY(raw) ? numT(raw) : null); }
     const nums = vals.filter((v) => v != null);
     if (nums.length) sets.push({ name: year || '', vals, avg: nums.reduce((a, b) => a + b, 0) / nums.length });
   }
@@ -226,7 +234,7 @@ function monthSets(yrs, row, cfg) {
 
 function ratioSets(d, row, cfg) {
   if (!d.num || !d.den) return { sets: [], cut: 0 };
-  const dm = new Map(d.den), g = (c) => { if (!c) return null; const r = getField(row, c); return HIDE_EMPTY(r) ? null : num(r); };
+  const dm = new Map(d.den), g = (c) => { if (!c) return null; const r = getField(row, c); return HIDE_EMPTY(r) ? null : numT(r); };
   const yrs = [];
   for (const [year, nm] of d.num) {
     const dd = dm.get(year) || (dm.size === 1 ? [...dm.values()][0] : null); if (!dd) continue;
@@ -257,7 +265,7 @@ export function renderChart(entry, row) {
     const k = cfg.kind || 'hbar';
     if (k === 'hbar') body = hbarChart(d.items, row, cfg);
     else {
-      const vals = d.items.map((it) => { const raw = getField(row, it.col); return HIDE_EMPTY(raw) ? null : num(raw); });
+      const vals = d.items.map((it) => { const raw = getField(row, it.col); return HIDE_EMPTY(raw) ? null : numT(raw); });
       body = colChart(d.items.map((it) => it.tag), [{ name: d.title, vals, color: cfg.color || '#0b8f5a' }], cfg, k, {});
     }
   }
@@ -356,7 +364,7 @@ function openChartEditor(t, entry, headers, done) {
       if (!bases.length) body.append(h('div', { class: 'mut small' }, 'Belum ada data bulanan terdeteksi di CSV.'));
       body.append(frow('Pembilang', select([['', '— pilih —'], ...bases], cc.numBase || '', (v) => { set('numBase', v); })));
       body.append(frow('Penyebut', select([['', '— pilih —'], ...bases], cc.denBase || '', (v) => { set('denBase', v); })));
-      body.append(frow('Rumus siap pakai', select([['', '— pilih —'], ['1000', 'BJR (Ton × 1000 ÷ JJG)'], ['1', 'Rasio biasa (A ÷ B)'], ['100', 'Persen (A ÷ B × 100)']], '', (v) => { if (v) { set('mult', +v); if (v === '1000' && !cc.title) set('title', 'BJR'); draw(); } })));
+      body.append(frow('Rumus siap pakai', select([['', '— pilih —'], ['1000', 'BJR (Ton × 1000 ÷ JJG)'], ['1', 'Rasio biasa (A ÷ B)'], ['100', 'Persen (A ÷ B × 100)']], String(cc.mult == null ? '' : cc.mult).replace(/^(?!1000$|1$|100$).*$/, ''), (v) => { if (v) { set('mult', +v); if (v === '1000' && (!cc.title || cc.title === 'Grafik baru')) set('title', 'BJR'); draw(); } })));
       body.append(frow('Pengali', numInput(cc.mult == null ? '' : cc.mult, (v) => { const n = parseFloat(String(v).replace(',', '.')); set('mult', isFinite(n) ? n : ''); }, { placeholder: '1000' })));
     }
     if (entry.desc.custom && cc.mode !== 'ratio') {
