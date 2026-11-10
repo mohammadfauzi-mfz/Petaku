@@ -209,3 +209,6 @@ h4{margin:12px 0 4px;font-size:13px}
 .bar .bt{position:relative}.bar .bt .tgv{position:absolute;top:-2px;bottom:-2px;width:2px;background:#d6402a}
 .avgline.tg{border-top:1.5px solid #d6402a}
 .mchart.line{display:block;padding-top:4px}.lnsvg{width:100%;height:auto;display:block;color:var(--tx)}
+
+.mb .mv.sm{writing-mode:vertical-rl;transform:rotate(180deg);height:24px;font-size:7px;line-height:1;align-self:center}
+.mchart.tall{height:136px}

@@ -170,11 +170,11 @@ function colChart(labels, sets, cfg, kind, opt) {
     for (const x of sets) leg.append(h('span', { class: 'mly' }, h('i', { style: { background: x.color } }), (x.name || 'Data') + ' ', x.avg != null ? h('em', {}, `rata-rata ${val(cfg, x.avg)} · ${x.vals.filter((v) => v != null).length} bln`) : null));
     wrap.append(leg);
   }
-  const chart = h('div', { class: 'mchart grp', style: { gridTemplateColumns: `repeat(${N},1fr)` } });
+  const chart = h('div', { class: 'mchart grp' + (kind !== 'line' && n > 1 && cfg.labelAll === true ? ' tall' : ''), style: { gridTemplateColumns: `repeat(${N},1fr)` } });
   const tg = cfg.target != null && cfg.target !== '' ? +cfg.target : null;
   if (opt.avg) for (const x of sets) if (x.avg != null) chart.append(h('div', { class: 'avgline', style: { bottom: (14 + Y(x.avg)) + 'px', borderTopColor: x.color } }));
   if (tg != null && isFinite(tg)) chart.append(h('div', { class: 'avgline tg', style: { bottom: (14 + Y(tg)) + 'px' } }));
-  const showLbl = (x) => cfg.labels !== false && (n === 1 || x === last);
+  const showLbl = (x) => cfg.labels !== false && (n === 1 || x === last || cfg.labelAll === true);
   if (kind === 'line') {
     const W = 300, P = 8, X = (i) => (N === 1 ? W / 2 : P + (W - 2 * P) * i / (N - 1)), YY = (v) => H + 4 - (Y(v));
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -189,7 +189,7 @@ function colChart(labels, sets, cfg, kind, opt) {
     for (const x of sets) x.vals.forEach((v, i) => {
       if (v == null) return;
       svg.append(mk('circle', { cx: X(i), cy: YY(v) + 8, r: 2.6, fill: x.color }));
-      if (showLbl(x)) { const t = mk('text', { x: X(i), y: YY(v) + 3, 'text-anchor': 'middle', 'font-size': 8, fill: 'currentColor' }); t.textContent = val(cfg, v); svg.append(t); }
+      if (showLbl(x)) { const t = mk('text', { x: X(i), y: x === last || n === 1 ? YY(v) + 3 : YY(v) + 21, fill: x === last || n === 1 ? 'currentColor' : x.color, 'text-anchor': 'middle', 'font-size': 8 }); t.textContent = val(cfg, v); svg.append(t); }
     });
     labels.forEach((l, i) => { const t = mk('text', { x: X(i), y: H + 22, 'text-anchor': 'middle', 'font-size': 8.5, fill: '#7a8a82' }); t.textContent = l; svg.append(t); });
     if (tg != null && isFinite(tg)) svg.append(mk('line', { x1: 0, x2: W, y1: YY(tg) + 8, y2: YY(tg) + 8, stroke: TCOL, 'stroke-width': 1.2, 'stroke-dasharray': '4 3' }));
@@ -200,7 +200,7 @@ function colChart(labels, sets, cfg, kind, opt) {
       const col = h('div', { class: 'mgrp' }), bars = h('div', { class: 'mbars' });
       for (const x of sets) {
         const v = x.vals[i];
-        bars.append(h('div', { class: 'mb' }, h('span', { class: 'mv' }, v != null && showLbl(x) ? val(cfg, v) : ''),
+        bars.append(h('div', { class: 'mb' }, h('span', { class: 'mv' + (n > 1 && cfg.labelAll === true ? ' sm' : ''), style: n > 1 && cfg.labelAll === true ? { color: x.color } : null }, v != null && showLbl(x) ? val(cfg, v) : ''),
           h('i', { style: { height: v == null ? '2px' : Y(v) + 'px', background: v == null ? '#d9dedb' : x.color } })));
       }
       col.append(bars, h('span', { class: 'ml' }, labels[i]));
@@ -210,7 +210,7 @@ function colChart(labels, sets, cfg, kind, opt) {
   wrap.append(chart);
   const notes = [];
   if (nonZero) notes.push(`Sumbu tidak mulai dari 0 (${val(cfg, lo) || fmtV(lo)} – ${val(cfg, hi) || fmtV(hi)}) agar perubahan terlihat jelas.`);
-  if (opt.avg && n > 1) notes.push('Angka di atas batang = tahun terbaru. Garis putus = rata-rata.');
+  if (opt.avg && n > 1) notes.push(cfg.labelAll === true ? 'Angka berwarna sesuai tahunnya.' : 'Angka di atas batang = tahun terbaru. Garis putus = rata-rata.');
   else if (opt.avg) notes.push('Garis putus = rata-rata.');
   if (tg != null && isFinite(tg)) notes.push(`Garis merah = target ${val(cfg, tg)}.`);
   if (opt.cut) notes.push(`Hanya ${n} tahun terbaru ditampilkan.`);
@@ -383,6 +383,7 @@ function openChartEditor(t, entry, headers, done) {
       body.append(frow('Maksimum', numInput(cc.max == null ? '' : cc.max, (v) => { const n = parseFloat(String(v).replace(',', '.')); set('max', isFinite(n) ? n : ''); }, { placeholder: 'otomatis' })));
     }
     body.append(h('div', { style: { margin: '6px 0' } }, check(cc.labels !== false, (v) => { set('labels', v ? '' : false); }, 'Tampilkan angka pada grafik')));
+    if (isMd) body.append(frow('Angka tahun', select([['last', 'Hanya tahun terbaru'], ['all', 'Semua tahun']], cc.labelAll === true ? 'all' : 'last', (v) => { set('labelAll', v === 'all' ? true : ''); })));
     body.append(frow('Desimal', numInput(cc.dec == null ? '' : cc.dec, (v) => { const n = parseInt(v, 10); set('dec', isFinite(n) && n >= 0 && n <= 4 ? n : ''); }, { placeholder: 'otomatis' })));
     if (!isMd) body.append(h('div', { style: { margin: '6px 0' } }, check(cc.trend !== false, (v) => { set('trend', v ? '' : false); }, 'Tampilkan panah naik/turun (▲▼) untuk batang mendatar')));
     body.append(frow('Garis target', numInput(cc.target == null ? '' : cc.target, (v) => { const n = parseFloat(String(v).replace(',', '.')); set('target', isFinite(n) ? n : ''); }, { placeholder: 'kosong = tanpa garis' })));
