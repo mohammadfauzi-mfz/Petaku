@@ -1,3 +1,4 @@
+import { calcEditor } from './calc.js';
 import { S, theme, bump, defThemes, defRules, saveSoon, emit, getProp } from './model.js';
 import { PATTERNS } from './render.js';
 import { h, $, uid, clone, toast, select, pickFile, readText, readDataURL, shareFile } from './util.js';
@@ -236,9 +237,10 @@ export function renderTheme() {
     row('Sumber CSV', select([['', '(otomatis: semua CSV blok digabung)'], ...S.dsList.filter((d) => d.level !== 'afd').map((d) => [d.id, d.name])], t.dsId || '', (v) => { t.dsId = v; touch(); rerender(); })),
     S.dsList.length ? null : h('div', { class: 'mut small' }, 'Belum ada CSV — impor di tab Data.'),
     row('Cara warna', select([['range', 'Rentang angka'], ['category', 'Kategori teks']], t.mode, (v) => { t.mode = v; touch(); rerender(); })),
-    row('Kolom data', textInput(t.field, (v) => { t.field = v; touch(); }, { list: 'dl-fields', placeholder: 'Nama kolom CSV' })),
-    t.mode === 'range' ? row('Pengali', numInput(t.scale, (v) => { t.scale = v == null ? 1 : v; touch(); }, { placeholder: '1' })) : null,
-    t.mode === 'range' ? h('div', { class: 'mut small' }, 'Nilai dikalikan pengali sebelum dicocokkan ke kelas (mis. 100 bila CSV berisi 1,10 untuk 110%).') : null,
+    calcEditor(t, touch, rerender),
+    t.calc && t.calc.on ? null : row('Kolom data', textInput(t.field, (v) => { t.field = v; touch(); }, { list: 'dl-fields', placeholder: 'Nama kolom CSV' })),
+    t.mode === 'range' && !(t.calc && t.calc.on) ? row('Pengali', numInput(t.scale, (v) => { t.scale = v == null ? 1 : v; touch(); }, { placeholder: '1' })) : null,
+    t.mode === 'range' && !(t.calc && t.calc.on) ? h('div', { class: 'mut small' }, 'Nilai dikalikan pengali sebelum dicocokkan ke kelas (mis. 100 bila CSV berisi 1,10 untuk 110%).') : null,
     check(!!t.showCounts, (v) => { t.showCounts = v; touch(); }, 'Tampilkan jumlah blok per kelas di legenda'),
     (() => {
       const op = t.opacity == null ? 100 : t.opacity;

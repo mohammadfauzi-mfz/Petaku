@@ -1,5 +1,5 @@
 // Ringkasan & peringkat blok untuk tema aktif (mengikuti filter peta)
-import { S, theme, getField, getProp, computeStats, filterActive, filterSummary, ensureStyles } from './model.js';
+import { S, theme, getField, fieldValue, getProp, computeStats, filterActive, filterSummary, ensureStyles } from './model.js';
 import { h, num, select, toast } from './util.js';
 import { openSheet } from './ui-common.js';
 import { compareTables, recapTable, autoTo, recapGridTables, recapGrid, outlookSource } from './ui-tables.js';
@@ -9,14 +9,14 @@ const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
 
 function collect() {
   const t = theme(), out = [];
-  const sc = t.scale == null || t.scale === '' ? 1 : Number(t.scale);
+  const sc = (t.calc && t.calc.on) || t.scale == null || t.scale === '' ? 1 : Number(t.scale);
   for (const l of S.layers) {
     if (!l.themed) continue;
     const rt = S.rt.get(l.id); if (!rt || !rt.feats) continue;
     ensureStyles(l, rt.feats);
     for (const f of rt.feats) {
       if (!f.polys || f._pass === false || !f._row) continue;
-      const raw = getField(f._row, t.field);
+      const raw = fieldValue(t, f._row);
       const v = num(raw);
       const cls = f._style && f._style.ci >= 0 ? t.classes[f._style.ci] : null;
       out.push({

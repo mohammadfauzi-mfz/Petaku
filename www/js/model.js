@@ -327,6 +327,11 @@ export function indexDs(ds) {
     if (k && !ds.map.has(k)) ds.map.set(k, r);
   }
 }
+export const hooks = { calc: null };
+export function fieldValue(t, row) {
+  if (t && t.calc && t.calc.on && hooks.calc) return hooks.calc(t, row);
+  return getField(row, t && t.field);
+}
 export function getField(row, name, ds) {
   if (!row || !name) return undefined;
   if (name in row) return row[name];
@@ -486,7 +491,7 @@ function resolveBase(t, row, props, key) {
     if (matchRule(r, row, props, key)) return { fill: r.noFill ? null : r.fill, pattern: r.pattern || 'none', pc: r.pc, ci: -1, rule: r.id, alpha: alphaOf(t, r) };
   }
   if (!row) return noDataStyle(t);
-  const raw = getField(row, t.field);
+  const raw = fieldValue(t, row);
   if (raw === undefined) return noDataStyle(t);
   const cls = t.classes || [];
   if (t.mode === 'category') {
@@ -500,7 +505,7 @@ function resolveBase(t, row, props, key) {
   }
   let v = num(raw);
   if (v == null) return noDataStyle(t);
-  v *= (t.scale == null || t.scale === '' ? 1 : Number(t.scale));
+  v *= (t.calc && t.calc.on) || t.scale == null || t.scale === '' ? 1 : Number(t.scale);
   for (let i = 0; i < cls.length; i++) {
     const c = cls[i];
     const lo = c.min === null || c.min === '' || c.min === undefined, hi = c.max === null || c.max === '' || c.max === undefined;

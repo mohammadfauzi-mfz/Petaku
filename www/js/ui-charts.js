@@ -6,7 +6,7 @@ import { zoomable } from './ui-zoom.js';
 import { openSheet, confirmBox, textInput, numInput, colorInput, check, row as frow } from './ui-common.js';
 
 // angka CSV: "3,449" = 3449 (ribuan), "15,60" = 15.6 (desimal koma)
-function numT(x) {
+export function numT(x) {
   if (x == null) return null;
   if (typeof x === 'number') return isFinite(x) ? x : null;
   const t = String(x).trim();
