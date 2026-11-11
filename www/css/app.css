@@ -226,3 +226,10 @@ h4{margin:12px 0 4px;font-size:13px}
 .itab.cls td,.itab.cls th{font-size:10.5px;padding:3px 2px;text-align:center}
 .itab.cls td.lft{text-align:left;white-space:nowrap;font-weight:700}
 .clsdot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px;border:1px solid rgba(0,0,0,.2)}
+
+.zoomable{cursor:zoom-in}
+.zv{position:fixed;inset:0;z-index:100000;background:#fff;display:flex;flex-direction:column}
+.zv-bar{display:flex;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line,#ddd);background:#fff}
+.zv-body{position:relative;flex:1;overflow:hidden;touch-action:none;background:#fff;user-select:none}
+.zv-pan{position:absolute;left:0;top:0;transform-origin:0 0;width:360px;padding:8px;box-sizing:border-box}
+.zv-hint{font-size:11px;color:#777;text-align:center;padding:4px;border-top:1px solid var(--line,#eee)}

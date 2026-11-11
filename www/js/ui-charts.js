@@ -2,6 +2,7 @@
 import { S, getField, bump, afdCombined } from './model.js';
 import { h, num, uid, select, toast } from './util.js';
 import { compareTables, outlookValue, onTableView, METRIC_OPT } from './ui-tables.js';
+import { zoomable } from './ui-zoom.js';
 import { openSheet, confirmBox, textInput, numInput, colorInput, check, row as frow } from './ui-common.js';
 
 // angka CSV: "3,449" = 3449 (ribuan), "15,60" = 15.6 (desimal koma)
@@ -328,7 +329,8 @@ function renderClasses(entry, ctx) {
 
 // satu grafik -> elemen <details>, atau null jika tidak ada data
 const yearView = new Map();   // pilihan tahun pengguna per grafik (sementara, selama aplikasi dibuka)
-export function renderChart(entry, row, th, ctx) {
+export function renderChart(entry, row, th, ctx) { return zoomable(renderChart0(entry, row, th, ctx)); }
+function renderChart0(entry, row, th, ctx) {
   if (entry.desc.type === 'classes') return renderClasses(entry, ctx);
   const cfg0 = entry.cfg || {}, d = entry.desc;
   const cfg = cfg0;
