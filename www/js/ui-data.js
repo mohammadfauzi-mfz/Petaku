@@ -1,9 +1,17 @@
-import { S, bump, buildDs, indexDs, autoKeyCol, computeStats, theme, loadLayer, putDataset, removeDataset, dsForTheme } from './model.js';
+import { S, afdKeyCol, afdRow, bump, buildDs, indexDs, autoKeyCol, computeStats, theme, loadLayer, putDataset, removeDataset, dsForTheme } from './model.js';
 import { parseCSV } from './geo.js';
 import { h, $, toast, pickFile, readText, select, uid, shareFile, shareFiles } from './util.js';
 import { openSheet, check, confirmBox, textInput } from './ui-common.js';
 
 // Impor satu berkas CSV sebagai dataset. Nama sama -> isi dataset lama diganti.
+// grafik WD bawaan: garis, target 200 mm
+function seedAfdCharts(ds) {
+  if (!ds.headers.some((h) => /^wd\b/i.test(String(h).trim()))) return;
+  for (const t of S.themes) {
+    t.charts = t.charts || [];
+    if (!t.charts.some((c) => c.key === 'm:WD')) t.charts.push({ key: 'm:WD', title: 'Water Deficit', kind: 'line', target: 200, unit: 'mm' });
+  }
+}
 export async function importCSVFile(file, opts) {
   opts = opts || {};
   const text = await readText(file);
@@ -12,6 +20,11 @@ export async function importCSVFile(file, opts) {
   // pastikan layer bertema sudah dimuat agar kolom kunci bisa ditebak
   for (const l of S.layers) if (l.themed && l.visible) { try { await loadLayer(l); } catch (e) { /* abaikan */ } }
   const ds = buildDs(parsed, file.name, parsed.headers[0]);
+  if (/^(afd|afdeling)\b/i.test(String(parsed.headers[0]).trim())) {
+    ds.level = 'afd'; ds.keyCol = afdKeyCol(ds); indexDs(ds); putDataset(ds); seedAfdCharts(ds);
+    if (!opts.silent) { bump('data'); toast(`CSV tingkat afdeling dimuat: ${ds.rows.length} baris → tampil di tab "Afdeling" pada info lokasi`, 4800); }
+    return ds;
+  }
   ds.keyCol = autoKeyCol(ds);
   indexDs(ds);
   putDataset(ds);
@@ -25,6 +38,14 @@ export async function importCSVFile(file, opts) {
   return ds;
 }
 
+// info pencocokan afdeling CSV dengan afdeling di peta
+function afdInfo(d) {
+  const names = new Set();
+  for (const l of S.layers) { const rt = S.rt.get(l.id); if (l.themed && rt && rt.feats) for (const f of rt.feats) { const a = f.props && (f.props.Afdeling || f.props.afdeling); if (a) names.add(String(a)); } }
+  if (!names.size) return ' · pencocokan dicek setelah peta dimuat';
+  let ok = 0; for (const n of names) if (afdRow(d, n)) ok++;
+  return ` · cocok ${ok}/${names.size} afdeling di peta`;
+}
 export async function importCSVFiles(files) {
   let last = null;
   for (const f of files) last = await importCSVFile(f, { silent: files.length > 1 });
@@ -93,7 +114,8 @@ export function renderData() {
     const item = h('div', { class: 'themeItem' + (cur && cur.id === d.id ? ' active' : '') },
       h('div', { style: { flex: 1, minWidth: 0 } },
         h('div', { class: 'nm', style: { wordBreak: 'break-all' } }, d.name),
-        h('div', { class: 'mut small' }, `${d.rows.length} baris · ${d.headers.length} kolom` + (by.length ? ' · dipakai: ' + by.join(', ') : ' · belum dipakai tema'))),
+        h('div', { class: 'mut small' }, `${d.level === 'afd' ? 'TINGKAT AFDELING · ' : ''}${d.rows.length} baris · ${d.headers.length} kolom` + (d.level === 'afd' ? afdInfo(d) : by.length ? ' · dipakai: ' + by.join(', ') : ' · belum dipakai tema'))),
+      h('button', { class: 'btn sec sm', onclick: () => { d.level = d.level === 'afd' ? '' : 'afd'; if (d.level === 'afd') { d.keyCol = afdKeyCol(d); indexDs(d); } else { d.keyCol = autoKeyCol(d); indexDs(d); } bump('data'); renderData(); } }, d.level === 'afd' ? 'Jadikan blok' : 'Jadikan afdeling'),
       h('button', { class: 'btn sec sm', onclick: () => previewSheet(d) }, 'Lihat'),
       h('button', { class: 'btn sec sm', onclick: () => shareSheet([d]) }, 'Bagikan'),
       h('button', { class: 'btn sec sm', onclick: () => {

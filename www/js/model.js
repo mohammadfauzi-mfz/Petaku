@@ -18,8 +18,9 @@ export const S = {
 
 // dataset yang dipakai tema aktif (tema.dsId, kalau kosong: dataset aktif)
 export function dsForTheme(t) {
-  if (t && t.dsId) { const d = S.dsList.find((x) => x.id === t.dsId); if (d) return d; }
-  return S.dsList.find((x) => x.id === S.dsActive) || S.dsList[0] || null;
+  const blk = S.dsList.filter((x) => x.level !== 'afd');   // CSV tingkat afdeling tidak dipakai mewarnai blok
+  if (t && t.dsId) { const d = blk.find((x) => x.id === t.dsId); if (d) return d; }
+  return blk.find((x) => x.id === S.dsActive) || blk[0] || null;
 }
 Object.defineProperty(S, 'ds', { get() { return dsForTheme(S.themes.find((t) => t.id === S.themeId) || S.themes[0]); }, enumerable: false });
 
@@ -121,7 +122,7 @@ export function defCfg() {
 // ---------------- persistensi ----------------
 let saveT;
 export function saveSoon() { clearTimeout(saveT); saveT = setTimeout(saveNow, 400); }
-export const slimDs = (d) => ({ id: d.id, name: d.name, headers: d.headers, rows: d.rows, keyCol: d.keyCol, delimiter: d.delimiter, updatedAt: d.updatedAt || 0 });
+export const slimDs = (d) => ({ id: d.id, name: d.name, headers: d.headers, rows: d.rows, keyCol: d.keyCol, delimiter: d.delimiter, level: d.level || '', updatedAt: d.updatedAt || 0 });
 export const defSync = () => ({ repo: 'mohammadfauzi-mfz/Petaku', branch: 'main', folder: 'sync', token: '', lastManifest: '', lastPull: 0, scope: { data: true, themes: true, layers: true, cfg: false }, lastUpdateCheck: 0 });
 export async function saveNow() {
   try {
@@ -151,7 +152,7 @@ export async function init() {
   S.sync = { ...defSync(), ...((await dbGet('sync')) || {}) };
   S.sync.scope = { ...defSync().scope, ...(S.sync.scope || {}) };
   const L2 = await dbGet('dsList');
-  if (Array.isArray(L2)) S.dsList = L2.filter((d) => d && d.rows).map((d) => buildDs(d, d.name, d.keyCol, d.id, d.updatedAt));
+  if (Array.isArray(L2)) S.dsList = L2.filter((d) => d && d.rows).map((d) => { const x = buildDs(d, d.name, d.keyCol, d.id, d.updatedAt); x.level = d.level || ''; return x; });
   else {
     const old = await dbGet('ds');   // migrasi dari versi 1 CSV
     if (old && old.rows) S.dsList = [buildDs(old, old.name, old.keyCol)];
@@ -177,8 +178,39 @@ export function buildDs(parsed, name, keyCol, id, updatedAt) {
 export function putDataset(ds) {
   const i = S.dsList.findIndex((d) => d.name.toLowerCase() === ds.name.toLowerCase());
   if (i >= 0) { ds.id = S.dsList[i].id; S.dsList[i] = ds; } else S.dsList.push(ds);
-  S.dsActive = ds.id;
+  if (ds.level !== 'afd') S.dsActive = ds.id;
   return ds;
+}
+// ---- CSV tingkat afdeling ----
+export const afdDatasets = () => S.dsList.filter((d) => d.level === 'afd');
+// samakan penulisan afdeling: "Afd.04", "AFD 4", "Afdeling 4" -> "4"; "KT 1.1" -> "kt1.1"
+export function afdKey(v) {
+  let t = String(v == null ? '' : v).trim().toLowerCase();
+  t = t.replace(/^(afdeling|afd)[\s._\-:]*/, '').replace(/\s+/g, '');
+  if (/^0*\d+$/.test(t)) t = String(parseInt(t, 10));
+  return t;
+}
+// kolom kunci afdeling: header "Afd"/"Afdeling", kalau tidak ada kolom pertama
+export const afdKeyCol = (ds) => ds.headers.find((h) => /^(afd|afdeling)\b/i.test(String(h).trim())) || ds.headers[0];
+export function afdRow(ds, name) {
+  if (!ds._amap || ds._amapN !== ds.rows.length) {
+    ds._amap = new Map(); const kc = afdKeyCol(ds);
+    for (const r of ds.rows) { const k = afdKey(r[kc]); if (k && !ds._amap.has(k)) ds._amap.set(k, r); }
+    ds._amapN = ds.rows.length;
+  }
+  return ds._amap.get(afdKey(name)) || null;
+}
+// gabungan semua CSV afdeling untuk satu afdeling -> {row, headers, hmap, rows:[row], names, miss}; null bila tidak ada CSV afdeling
+export function afdCombined(afdName) {
+  const list = afdDatasets(); if (!list.length) return null;
+  const row = {}, headers = [], hmap = {}, names = []; let hit = 0;
+  for (const d of list) {
+    const r = afdRow(d, afdName); if (!r) continue;
+    hit++; names.push(d.name);
+    const kc = afdKeyCol(d);
+    for (const hd of d.headers) { if (hd === kc && headers.includes(hd)) continue; if (!(hd in row)) { headers.push(hd); hmap[String(hd).toLowerCase().trim()] = hd; } row[hd] = r[hd]; }
+  }
+  return { row: hit ? row : null, headers, hmap, rows: hit ? [row] : [], names, keyCol: list[0] ? afdKeyCol(list[0]) : '', total: list.length, hit, id: '_afd' };
 }
 export function removeDataset(id) {
   S.dsList = S.dsList.filter((d) => d.id !== id);

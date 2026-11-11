@@ -5,7 +5,7 @@ import { renderMap, dataBounds, fitView } from './render.js';
 import { hitPolygon, distToFeat, toWorld, M_PER_UNIT } from './geo.js';
 import { $, h, toast, normKey, hexA } from './util.js';
 import { openSheet } from './ui-common.js';
-import { buildBlockCard } from './ui-info.js';
+import { buildInfo } from './ui-info.js';
 import { getProp } from './model.js';
 import { makePatternTile } from './render.js';
 
@@ -189,7 +189,7 @@ function showInfo(hits, px, py) {
   const body = h('div', {});
   hits.forEach((hit) => {
     const { layer, feat } = hit;
-    if (layer.themed) { body.append(buildBlockCard(layer, feat)); return; }
+    if (layer.themed) { body.append(buildInfo(layer, feat)); return; }
     const card = h('div', { class: 'card' });
     card.append(h('h3', {}, layer.name));
     const kv = h('div', { class: 'kv' });

@@ -1,5 +1,5 @@
 // Tabel kustom di info lokasi: "grid" (sel bebas dengan {Kolom}, mis. tabel LSU) dan "compare" (Plan vs Act dari kolom bulanan)
-import { S, theme, getField, getProp, bump } from './model.js';
+import { afdCombined, S, theme, getField, getProp, bump } from './model.js';
 import { h, num, uid, select, toast } from './util.js';
 import { openSheet, confirmBox, textInput, colorInput, check, row as frow } from './ui-common.js';
 
@@ -38,11 +38,13 @@ function serMap(ds) {
   return m;
 }
 function series(row, prefix) {
-  const ds = S.ds; if (!ds || !prefix) return null;
+  const ds = CUR_DS || S.ds; if (!ds || !prefix) return null;
   const cols = serMap(ds).get(String(prefix).trim().toLowerCase());
   if (!cols) return null;
-  return cols.map((c) => (c ? numT(getField(row, c)) : null));
+  return cols.map((c) => (c ? numT(gf(row, c)) : null));
 }
+let CUR_DS = null; // dataset virtual (afdeling) saat membangun tabel tingkat afdeling
+const gf = (r, k) => getField(r, k, CUR_DS);
 let TH = null; // tema aktif (dipakai untuk mencari sumber Outlook otomatis)
 // sumber bulan sisa untuk Outlook: t.fill, atau sisi "Plan" tabel ini, atau sisi Plan tabel lain yang aktualnya sama
 export function outlookSource(t) {
@@ -152,7 +154,7 @@ function fillTplR(str, resolve) {
 function fillTpl(str, row, props) {
   return fillTplR(str, (k) => {
     if (k.startsWith('@')) return getProp(props, k.slice(1));
-    let v = getField(row, k); if (v === undefined && k.toLowerCase() === 'blok') v = getProp(props, 'Blok');
+    let v = gf(row, k); if (v === undefined && k.toLowerCase() === 'blok') v = getProp(props, 'Blok');
     return v;
   });
 }
@@ -161,7 +163,7 @@ function fillTplSum(str, blocks) {
   const cache = new Map();
   return fillTplR(str, (k) => {
     if (k.startsWith('@')) return null;
-    if (!cache.has(k)) { let sum = null; for (const b of blocks) { const n = numT(getField(b.row, k)); if (n != null) sum = (sum || 0) + n; } cache.set(k, sum); }
+    if (!cache.has(k)) { let sum = null; for (const b of blocks) { const n = numT(gf(b.row, k)); if (n != null) sum = (sum || 0) + n; } cache.set(k, sum); }
     return cache.get(k);
   });
 }
@@ -204,7 +206,7 @@ function calcSides(t, row, from, to, ol) {
   const L = sideSeries(t.left); let R = sideSeries(t.right);
   if (fl) { const F = sideSeries(fl); R = { ton: mergeOL(R.ton, F.ton, to), jjg: mergeOL(R.jjg, F.jjg, to) }; }
   const end = fl ? 12 : to;
-  const luas = numT(getField(row, t.luas)), pkk = numT(getField(row, t.pkk));
+  const luas = numT(gf(row, t.luas)), pkk = numT(gf(row, t.pkk));
   const calc = (S_) => {
     const ton = sumRange(S_.ton, from, end), jjg = sumRange(S_.jjg, from, end);
     return { ton, jjg, tonha: ton != null && luas ? ton / luas : null, jjgpkk: jjg != null && pkk ? jjg / pkk : null, bjr: ton != null && jjg ? ton * 1000 / jjg : null };
@@ -243,7 +245,8 @@ function compareTable(t, row) {
   const wrap = h('div', {});
   // pilih periode
   const mo = MLAB.map((m, i) => [i + 1, m]);
-  const rerender = () => { const n = buildTable(t, row, null, true); wrap.replaceWith(n); };
+  const ds0 = CUR_DS;
+  const rerender = () => { const sv = CUR_DS; CUR_DS = ds0; let n; try { n = buildTable(t, row, null, true); } finally { CUR_DS = sv; } wrap.replaceWith(n); };
   const sel = h('div', { class: 'perrow' }, h('span', { class: 'mut small' }, 'Periode'),
     select(mo, from, (x) => { view.set(t.id, { ...(view.get(t.id) || {}), from: +x, to }); rerender(); }),
     h('span', { class: 'mut small' }, 's/d'),
@@ -264,7 +267,7 @@ function buildTable(t, row, props, inner) {
 export function tableSourceCols(th, headers) {
   const out = new Set(), hs = headers || [];
   for (const t of th.tables || []) {
-    if (t.enabled === false || t.hideSrc === false) continue;
+    if (t.enabled === false || t.hideSrc === false || t.level === 'afd') continue;
     if (t.kind === 'grid') {
       for (const r of t.rows || []) for (const c of r.slice(1)) String(c || '').replace(/\{([^}]+)\}/g, (_, k) => {
         k = k.trim(); const b = k.lastIndexOf('|'); if (b > 0 && /^\d$/.test(k.slice(b + 1).trim())) k = k.slice(0, b).trim();
@@ -279,18 +282,21 @@ export function tableSourceCols(th, headers) {
   }
   return out;
 }
-export function buildTables(th, row, props, where) {
-  TH = th;
+// ds (opsional) = dataset virtual afdeling -> hanya tabel bersumber "afdeling"; tanpa ds -> hanya tabel blok
+export function buildTables(th, row, props, where, ds) {
+  TH = th; CUR_DS = ds || null;
   const out = [];
-  if (!row) return out;
+  if (!row) { CUR_DS = null; return out; }
   for (const t of th.tables || []) {
     if (t.enabled === false) continue;
+    if ((t.level === 'afd') !== !!ds) continue;
     if (where && (where === 'top') !== !!t.top) continue;
     let body = null;
     try { body = buildTable(t, row, props); } catch (e) { console.error(e); }
     if (!body) continue;
     out.push(h('details', { class: 'ic-sec', open: t.open !== false }, h('summary', {}, t.title || 'Tabel'), body));
   }
+  CUR_DS = null;
   return out;
 }
 
@@ -341,7 +347,14 @@ function sampleFeat() {
   }
   return null;
 }
-function headers() { return S.ds ? S.ds.headers : []; }
+function headers(level) {
+  if (level === 'afd') { const set = new Set(); for (const d of S.dsList) if (d.level === 'afd') d.headers.forEach((x) => set.add(x)); return [...set]; }
+  return S.ds ? S.ds.headers : [];
+}
+function sampleAfd() {
+  const f = sampleFeat(); const a = f && f.props && (f.props.Afdeling || f.props.afdeling);
+  return a ? afdCombined(a) : null;
+}
 
 function listEditor(arr, mk, draw, rowEd, onMove) {
   const box = h('div', {});
@@ -363,14 +376,22 @@ function openEditor(t, done) {
     const f = sampleFeat();
     prev.append(h('div', { class: 'mut small' }, 'Pratinjau' + (f ? ' (blok ' + (getProp(f.props, 'Blok') || '') + ')' : '')));
     if (!f) { prev.append(h('div', { class: 'mut small' }, 'Belum ada blok berdata.')); return; }
-    let b = null; try { b = buildTable(t, f._row, f.props); } catch (e) { b = h('div', { class: 'mut' }, 'Error: ' + e.message); }
+    let b = null;
+    if (t.level === 'afd') {
+      const ac = sampleAfd();
+      if (!ac || !ac.row) { prev.append(h('div', { class: 'mut small' }, 'Belum ada data afdeling yang cocok.')); return; }
+      CUR_DS = ac; try { b = buildTable(t, ac.row, f.props); } catch (e) { b = h('div', { class: 'mut' }, 'Error: ' + e.message); } CUR_DS = null;
+      prev.append(b || h('div', { class: 'mut small' }, 'Tabel kosong untuk afdeling ini (kolom belum cocok?).')); return;
+    }
+    try { b = buildTable(t, f._row, f.props); } catch (e) { b = h('div', { class: 'mut' }, 'Error: ' + e.message); }
     prev.append(b || h('div', { class: 'mut small' }, 'Tabel kosong untuk blok ini (kolom belum cocok?).'));
   };
   const draw = () => {
     body.innerHTML = '';
-    body.append(h('datalist', { id: 'dl-tc' }, headers().map((x) => h('option', { value: x }))));
+    body.append(h('datalist', { id: 'dl-tc' }, headers(t.level).map((x) => h('option', { value: x }))));
     body.append(frow('Judul', textInput(t.title, (v) => { t.title = v; touch(); })));
     body.append(frow('Warna header', colorInput(t.color || '#0b5d3b', (v) => { t.color = v; touch(); })));
+    body.append(frow('Sumber data', select([['', 'CSV blok (tab Blok)'], ['afd', 'CSV afdeling (tab Afdeling)']], t.level || '', (v) => { t.level = v; touch(); draw(); })));
     body.append(h('div', { style: { margin: '6px 0' } }, check(t.open !== false, (v) => { t.open = v; touch(); }, 'Tampil terbuka di info lokasi')));
 
     if (t.kind === 'grid') {
@@ -476,7 +497,7 @@ export function tablesBody(t, rerender) {
 }
 
 // ---- rekap Plan vs Act per kelompok (mis. per afdeling): jumlahkan blok lalu hitung ulang rasio ----
-export const compareTables = (th) => (TH = th, th.tables || []).filter((x) => x.kind === 'compare' && x.enabled !== false);
+export const compareTables = (th) => (TH = th, th.tables || []).filter((x) => x.kind === 'compare' && x.enabled !== false && x.level !== 'afd');
 function aggSide(rowsData, from, to) {
   let ton = null, jjg = null, luas = 0, pkk = 0;
   for (const b of rowsData) {
@@ -494,7 +515,7 @@ export function aggCompare(t, blocks, from, to, ol) {
   const mk = (s, f) => blocks.map((x) => {
     let ton = series(x.row, s.ton), jjg = series(x.row, s.jjg);
     if (f) { ton = mergeOL(ton, series(x.row, f.ton), to); jjg = mergeOL(jjg, series(x.row, f.jjg), to); }
-    return { ton, jjg, luas: numT(getField(x.row, t.luas)), pkk: numT(getField(x.row, t.pkk)) };
+    return { ton, jjg, luas: numT(gf(x.row, t.luas)), pkk: numT(gf(x.row, t.pkk)) };
   });
   const L = mk(t.left), R = mk(t.right, fl), end = fl ? 12 : to;
   return { a: aggSide(L, from, end), b: aggSide(R, from, end) };
@@ -532,7 +553,7 @@ export function recapTable(t, groups, from, to, ol) {
   if (groups.length > 1) line('Total', groups.flatMap((g) => g.blocks), true);
   return { el: h('div', { class: 'tblwrap recap' }, h('table', { class: 'itab' }, thead, body)), rows: all, keys, pk };
 }
-export const recapGridTables = (th) => (th.tables || []).filter((x) => x.kind === 'grid' && x.enabled !== false && (x.recapCols || []).length);
+export const recapGridTables = (th) => (th.tables || []).filter((x) => x.kind === 'grid' && x.enabled !== false && x.level !== 'afd' && (x.recapCols || []).length);
 // groups: [{name, blocks:[{row}]}] -> tabel: baris = wilayah, kolom = (kolom terpilih x baris tabel)
 export function recapGrid(t, groups) {
   const cols = (t.recapCols || []).filter((j) => j > 0 && j < (t.cols || []).length);

@@ -1,7 +1,7 @@
 // Kartu info blok yang rapi: header, angka utama, grup detail dengan grafik mini
 import { buildTables, tableSourceCols } from './ui-tables.js';
 import { buildCharts } from './ui-charts.js';
-import { S, theme, getProp, getField } from './model.js';
+import { S, theme, getProp, getField, afdCombined, afdDatasets } from './model.js';
 import { h, num, toast } from './util.js';
 
 const METRICS = ['Yld', 'YOY', 'BBC3', 'BBC3S', 'std.S3', 'AP', 'Evaluasi'];
@@ -102,4 +102,69 @@ export function buildBlockCard(layer, feat) {
     h('button', { class: 'btn sec sm', onclick: () => copy(txt) }, 'Salin'),
     h('button', { class: 'btn sec sm', onclick: () => import('./ui-share.js').then((m) => m.openShare(layer, feat)) }, 'Bagikan…')));
   return card;
+}
+
+
+// ---- tab Afdeling: data dari CSV tingkat afdeling untuk afdeling blok yang diketuk ----
+export function afdNameOf(feat) { const p = feat.props || {}; return getProp(p, 'Afdeling') || ''; }
+export function hasAfdTab(feat) { return afdDatasets().length > 0 && !!afdNameOf(feat); }
+
+export function summaryTextAfd(layer, feat) {
+  const ac = afdCombined(afdNameOf(feat)); const p = feat.props || {};
+  const lines = [`${afdNameOf(feat)}` + (p.Estate ? ` (${p.Estate})` : '') + ' – data afdeling'];
+  if (ac && ac.row) for (const k of ac.headers) { if (k !== ac.keyCol && !HIDE_EMPTY(ac.row[k])) lines.push(`${k}: ${String(ac.row[k]).trim()}`); }
+  return lines.join('\n');
+}
+
+export function buildAfdCard(layer, feat) {
+  const th = theme(), props = feat.props || {}, afd = afdNameOf(feat);
+  const ac = afdCombined(afd);
+  const card = h('div', { class: 'ic' });
+  const hd = h('div', { class: 'ic-hd' }, h('div', { class: 'ic-code' }, String(afd)));
+  const badges = h('div', { class: 'ic-badges' });
+  if (props.Estate) badges.append(h('span', { class: 'bdg' }, String(props.Estate)));
+  badges.append(h('span', { class: 'bdg dark' }, 'Data afdeling'));
+  hd.append(badges); card.append(hd);
+  if (!ac || !ac.row) {
+    card.append(h('div', { class: 'ic-none' }, `Afdeling "${afd}" tidak ditemukan di CSV afdeling (${ac ? ac.total : 0} file). Pastikan kolom Afd berisi nama yang sama dengan peta (mis. 4, Afd.4, atau AFD04 dianggap sama).`));
+  } else {
+    for (const tb of buildTables(th, ac.row, props, 'top', ac)) card.append(tb);
+    for (const tb of buildTables(th, ac.row, props, 'rest', ac)) card.append(tb);
+    const ch = buildCharts(th, ac.row, ac.headers.filter((c) => c !== ac.keyCol));
+    for (const el of ch.els) card.append(el);
+    const rk = ch.rest.filter((c) => !HIDE_EMPTY(ac.row[c]));
+    if (rk.length) {
+      const kv = h('div', { class: 'kv' });
+      for (const c of rk) kv.append(h('b', {}, c), h('span', {}, String(ac.row[c]).trim()));
+      card.append(h('details', { class: 'ic-sec', open: true }, h('summary', {}, 'Data lainnya'), kv));
+    }
+    if (!ch.els.length && !rk.length && !card.querySelector('.ic-sec')) card.append(h('div', { class: 'ic-none' }, 'Belum ada tabel/grafik untuk data afdeling ini.'));
+    card.append(h('div', { class: 'ic-src' }, 'Sumber: ' + ac.names.join(', ')));
+  }
+  const txt = summaryTextAfd(layer, feat);
+  card.append(h('div', { class: 'ic-act' },
+    h('button', { class: 'btn sec sm', onclick: () => copy(txt) }, 'Salin'),
+    h('button', { class: 'btn sec sm', onclick: () => import('./ui-share.js').then((m) => m.openShare(layer, feat, 'afd')) }, 'Bagikan…')));
+  return card;
+}
+
+let lastTab = 'blok';
+// kartu info dengan sub tab Blok | Afdeling (tab hanya ada bila ada CSV afdeling)
+export function buildInfo(layer, feat) {
+  const blok = buildBlockCard(layer, feat);
+  if (!hasAfdTab(feat)) return blok;
+  const wrap = h('div', {});
+  const pane = h('div', {});
+  let afdCard = null;
+  const tabs = h('div', { class: 'ictabs' });
+  const show = (k) => {
+    lastTab = k;
+    tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.k === k));
+    pane.innerHTML = '';
+    if (k === 'afd') { if (!afdCard) afdCard = buildAfdCard(layer, feat); pane.append(afdCard); } else pane.append(blok);
+  };
+  for (const [k, l] of [['blok', 'Blok'], ['afd', 'Afdeling']]) tabs.append(h('button', { class: 'ictab', 'data-k': k, onclick: () => show(k) }, l));
+  wrap.append(tabs, pane);
+  show(lastTab);
+  return wrap;
 }

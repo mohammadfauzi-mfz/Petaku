@@ -4,7 +4,7 @@ import { h, num, toast, shareFile } from './util.js';
 import { openSheet } from './ui-common.js';
 import { buildXlsx } from './xlsx.js';
 import { canvasToBytes } from './export.js';
-import { buildBlockCard, summaryText } from './ui-info.js';
+import { buildBlockCard, buildAfdCard, summaryText, summaryTextAfd, afdNameOf } from './ui-info.js';
 
 const W = 420, SC = 2;
 const PROPS = ['display', 'position', 'top', 'left', 'right', 'bottom', 'flex', 'flex-direction', 'flex-wrap', 'flex-grow', 'flex-shrink', 'flex-basis', 'align-items', 'align-self', 'justify-content', 'gap', 'row-gap', 'column-gap',
@@ -22,11 +22,11 @@ function inlineStyles(src, dst) {
 }
 
 // bangun kartu info di luar layar (selalu tema terang) lalu ubah jadi kanvas
-async function capture(layer, feat) {
+async function capture(layer, feat, mode) {
   const root = document.documentElement, prev = root.dataset.theme;
   root.dataset.theme = 'light';
   const box = h('div', { style: { position: 'fixed', left: '-10000px', top: '0', width: W + 'px', padding: '12px', background: '#fff', boxSizing: 'border-box', fontFamily: getComputedStyle(document.body).fontFamily, color: '#17211c' } });
-  const card = buildBlockCard(layer, feat);
+  const card = mode === 'afd' ? buildAfdCard(layer, feat) : buildBlockCard(layer, feat);
   const act = card.querySelector('.ic-act'); if (act) act.remove();
   card.querySelectorAll('.perrow').forEach((x) => x.remove());
   card.querySelectorAll('details').forEach((d) => d.setAttribute('open', ''));
@@ -119,10 +119,10 @@ function rawVal(s) {
   if (/%$/.test(t)) { const n = num(t); if (n != null) return { v: n / 100, fmt: '0%' }; }
   const n = num(t); return n != null && !/^0\d/.test(t) ? { v: n } : { v: t };
 }
-function buildExcel(layer, feat) {
+function buildExcel(layer, feat, mode) {
   const root = document.documentElement, prev = root.dataset.theme; root.dataset.theme = 'light';
   const box = h('div', { style: { position: 'fixed', left: '-10000px', top: '0', width: W + 'px' } });
-  const card = buildBlockCard(layer, feat);
+  const card = mode === 'afd' ? buildAfdCard(layer, feat) : buildBlockCard(layer, feat);
   card.querySelectorAll('details').forEach((d) => d.setAttribute('open', ''));
   box.append(card); document.body.append(box);
   const th = theme(), sheets = [];
@@ -166,10 +166,11 @@ function buildExcel(layer, feat) {
 }
 
 const safe = (s) => String(s || '').replace(/[\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '');
-export function openShare(layer, feat) {
-  const blok = getProp(feat.props || {}, layer.keyField) || 'blok';
+export function openShare(layer, feat, mode) {
+  const afdM = mode === 'afd';
+  const blok = afdM ? (afdNameOf(feat) || 'afdeling') : (getProp(feat.props || {}, layer.keyField) || 'blok');
   const base = `Petaku_${safe(blok)}_${safe(theme().name)}`;
-  const txt = summaryText(layer, feat);
+  const txt = afdM ? summaryTextAfd(layer, feat) : summaryText(layer, feat);
   const busy = { v: false };
   const run = async (btn, fn) => {
     if (busy.v) return; busy.v = true; const old = btn.textContent; btn.textContent = 'Menyiapkan…'; btn.disabled = true;
@@ -177,10 +178,10 @@ export function openShare(layer, feat) {
   };
   const opt = (title, sub, fn) => { const b = h('button', { class: 'shopt' }, h('b', {}, title), h('small', {}, sub)); b.onclick = () => run(b, fn); return b; };
   const body = h('div', { class: 'shlist' },
-    opt('PDF', 'Sama dengan tampilan info lokasi', async () => { const c = await capture(layer, feat); await shareFile(base + '.pdf', await makePdf(c), 'application/pdf', base); }),
-    opt('Excel (.xlsx)', 'Angka, tabel berwarna, dan seluruh data blok', async () => { await shareFile(base + '.xlsx', buildExcel(layer, feat), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', base); }),
-    opt('Gambar (PNG)', 'Tampilan info lokasi sebagai gambar', async () => { const c = await capture(layer, feat); await shareFile(base + '.png', await canvasToBytes(c.cv, 'image/png'), 'image/png', base); }),
+    opt('PDF', 'Sama dengan tampilan info lokasi', async () => { const c = await capture(layer, feat, mode); await shareFile(base + '.pdf', await makePdf(c), 'application/pdf', base); }),
+    opt('Excel (.xlsx)', 'Angka, tabel berwarna, dan seluruh data blok', async () => { await shareFile(base + '.xlsx', buildExcel(layer, feat, mode), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', base); }),
+    opt('Gambar (PNG)', 'Tampilan info lokasi sebagai gambar', async () => { const c = await capture(layer, feat, mode); await shareFile(base + '.png', await canvasToBytes(c.cv, 'image/png'), 'image/png', base); }),
     h('a', { class: 'shopt', href: 'https://wa.me/?text=' + encodeURIComponent(txt), target: '_blank', rel: 'noopener' }, h('b', {}, 'Teks WhatsApp'), h('small', {}, 'Ringkasan angka sebagai pesan')),
     h('div', { class: 'mut small' }, 'PDF, Excel, dan Gambar dibagikan lewat menu bagikan HP — pilih WhatsApp lalu kontak/grup tujuan.'));
-  openSheet('Bagikan info blok ' + blok, body, { center: true });
+  openSheet((afdM ? 'Bagikan data afdeling ' : 'Bagikan info blok ') + blok, body, { center: true });
 }

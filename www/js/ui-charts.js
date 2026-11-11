@@ -22,12 +22,14 @@ const SEP = '[\\s_\\-./]*';
 const RE_NAME = new RegExp('^(.*?)' + SEP + MNAME + SEP + '(\\d{2}|\\d{4})?$', 'i');       // BJR Jan, BJR Jan 25, BJR_Januari_2025
 const RE_YM = new RegExp('^(.*?)' + SEP + '(20\\d{2})' + SEP + '(0?[1-9]|1[0-2])$');            // BJR 2025-01, BJR_2025_1
 const RE_MY = new RegExp('^(.*?)' + SEP + '(0?[1-9]|1[0-2])' + SEP + '(20\\d{2})$');            // BJR 01-2025
+const RE_YN = new RegExp('^(.*?)' + SEP + '(20\\d{2})' + SEP + MNAME + '$', 'i');            // WD 2022_Jan, BJR-2025-Mar
 const yy = (y) => (y == null ? '' : String(y).length === 2 ? '20' + y : String(y));
 
 function parseMonthCol(c) {
   const t = String(c).trim();
   let m = t.match(RE_YM); if (m) return { base: m[1].trim(), year: m[2], mon: +m[3] };
   m = t.match(RE_MY); if (m) return { base: m[1].trim(), year: m[3], mon: +m[2] };
+  m = t.match(RE_YN); if (m) { const k = MON[m[3].slice(0, 3).toLowerCase()]; if (k) return { base: m[1].trim(), year: m[2], mon: k }; }
   m = t.match(RE_NAME);
   if (m) { const k = MON[m[2].slice(0, 3).toLowerCase()]; if (k) return { base: m[1].trim(), year: yy(m[3]), mon: k }; }
   return null;
@@ -118,7 +120,8 @@ export function resolveCharts(th, headers) {
 }
 
 // ---------- penggambar ----------
-const YCOL = ['#9fb3c8', '#f2a541', '#8e7cc3', '#0b8f5a'];
+const YCOL = ['#c3ccd5', '#9fb3c8', '#f2a541', '#8e7cc3', '#0b8f5a'];
+const pickYears = (arr, cfg) => { const sel = Array.isArray(cfg.years) && cfg.years.length ? arr.filter((x) => cfg.years.includes(String(x.name))) : arr; const cut = !(Array.isArray(cfg.years) && cfg.years.length) && sel.length > 5 ? sel.length - 5 : 0; return { sets: sel.slice(cut), cut }; };
 const TCOL = '#d6402a';
 const itemRaw = (row, it) => (it.val != null ? it.val : getField(row, it.col));
 const val = (cfg, v) => (v == null ? '' : cfg.dec != null && cfg.dec !== '' ? Number(v).toFixed(+cfg.dec) : fmtV(v));
@@ -178,7 +181,7 @@ function colChart(labels, sets, cfg, kind, opt) {
   const nums = sets.flatMap((x) => x.vals.filter((v) => v != null));
   if (!nums.length) return null;
   const { lo, hi, nonZero } = scale(nums, cfg, true);
-  const H = 74, Y = (v) => Math.max(3, Math.min(H, (v - lo) / (hi - lo) * H));
+  const H = kind === 'line' ? 120 : 74, Y = (v) => Math.max(3, Math.min(H, (v - lo) / (hi - lo) * H));
   const n = sets.length, N = labels.length, last = sets[n - 1];
   const wrap = h('div', {});
   if (opt.legend) {
@@ -226,10 +229,10 @@ function colChart(labels, sets, cfg, kind, opt) {
   wrap.append(chart);
   const notes = [];
   if (nonZero) notes.push(`Sumbu tidak mulai dari 0 (${val(cfg, lo) || fmtV(lo)} – ${val(cfg, hi) || fmtV(hi)}) agar perubahan terlihat jelas.`);
-  if (opt.avg && n > 1) notes.push(cfg.labelAll === true ? 'Angka berwarna sesuai tahunnya.' : 'Angka di atas batang = tahun terbaru. Garis putus = rata-rata.');
+  if (opt.avg && n > 1) notes.push(cfg.labelAll === true ? 'Angka berwarna sesuai tahunnya.' : (kind === 'line' ? 'Angka di titik = tahun terbaru.' : 'Angka di atas batang = tahun terbaru.') + ' Garis putus = rata-rata.');
   else if (opt.avg) notes.push('Garis putus = rata-rata.');
   if (tg != null && isFinite(tg)) notes.push(`Garis merah = target ${val(cfg, tg)}.`);
-  if (opt.cut) notes.push(`Hanya ${n} tahun terbaru ditampilkan.`);
+  if (opt.cut) notes.push(`Hanya ${n} tahun terbaru ditampilkan (pilih tahun lain lewat Ubah grafik).`);
   if (notes.length) wrap.append(h('div', { class: 'mut small' }, notes.join(' ')));
   return wrap;
 }
@@ -241,8 +244,8 @@ function monthSets(yrs, row, cfg) {
     const nums = vals.filter((v) => v != null);
     if (nums.length) sets.push({ name: year || '', vals, avg: nums.reduce((a, b) => a + b, 0) / nums.length });
   }
-  const cut = sets.length > 4 ? sets.length - 4 : 0;
-  sets = sets.slice(cut);
+  const pk = pickYears(sets, cfg); const cut = pk.cut;
+  sets = pk.sets;
   sets.forEach((x, i) => { x.color = YCOL[YCOL.length - sets.length + i]; });
   if (sets.length && cfg.color) sets[sets.length - 1].color = cfg.color;
   return { sets, cut };
@@ -261,8 +264,8 @@ function ratioSets(d, row, cfg) {
     void mm;
   }
   yrs.sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  const cut = yrs.length > 4 ? yrs.length - 4 : 0;
-  const sets = yrs.slice(cut);
+  const pk = pickYears(yrs, cfg); const cut = pk.cut;
+  const sets = pk.sets;
   sets.forEach((x, i) => { x.color = YCOL[YCOL.length - sets.length + i]; });
   if (sets.length && cfg.color) sets[sets.length - 1].color = cfg.color;
   return { sets, cut };
@@ -320,10 +323,16 @@ const KIND_M = [['vbar', 'Batang per bulan (bertumpuk per tahun)'], ['line', 'Ga
 const KIND_I = [['hbar', 'Batang mendatar'], ['vbar', 'Batang tegak'], ['line', 'Garis']];
 const AXIS = [['auto', 'Otomatis'], ['zero', 'Selalu mulai dari 0'], ['manual', 'Atur sendiri (min / maks)']];
 
+// kolom CSV blok + semua CSV afdeling (untuk daftar & editor grafik)
+function allHeaders() {
+  const set = new Set(S.ds ? S.ds.headers : []);
+  for (const d of S.dsList) if (d.level === 'afd') d.headers.forEach((x) => set.add(x));
+  return [...set];
+}
 export function chartsBody(t, rerender) {
   t.charts = t.charts || [];
   const box = h('div', {});
-  const headers = S.ds ? S.ds.headers : [];
+  const headers = allHeaders();
   box.append(h('div', { class: 'mut small' }, 'Grafik yang tampil di info lokasi. Bawaannya otomatis dari kolom CSV; ubah hanya yang perlu. Urutan di daftar = urutan tampil.'));
   if (!headers.length) box.append(h('div', { class: 'mut small' }, 'Impor CSV dulu (tab Data) agar grafik otomatis terdaftar.'));
   const { list } = resolveCharts(t, headers);
@@ -401,6 +410,15 @@ function openChartEditor(t, entry, headers, done) {
       body.lastChild.value = cc.cols || '';
     }
     body.append(frow('Jenis', select(isMd ? KIND_M : KIND_I, cc.kind || (isMd ? 'vbar' : 'hbar'), (v) => { set('kind', v); })));
+    if (isMd) {
+      const yrs = entry.desc.type === 'month' ? entry.desc.yrs.map((x) => String(x[0])) : (entry.desc.num ? entry.desc.num.map((x) => String(x[0])) : []);
+      if (yrs.length) {
+        body.append(h('div', { class: 'mut small' }, 'Tahun yang ditampilkan (tidak ada yang dicentang = 5 tahun terbaru).'));
+        const yw = h('div', { class: 'chk2' });
+        for (const y of yrs) yw.append(h('div', {}, check(Array.isArray(cc.years) && cc.years.includes(y), (v) => { const cur = (Array.isArray(ensure().years) ? ensure().years : []).filter((x) => x !== y); if (v) cur.push(y); cur.sort(); set('years', cur.length ? cur : ''); }, y || 'Data')));
+        body.append(yw);
+      }
+    }
     body.append(frow('Satuan', textInput(cc.unit || '', (v) => { set('unit', v.trim() ? v : ''); }, { placeholder: 'mis. ton/ha' })));
     body.append(frow('Warna', h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, colorInput(cc.color || '#0b8f5a', (v) => { set('color', v); }),
       h('button', { class: 'btn sec sm', onclick: () => { set('color', ''); draw(); } }, 'Otomatis'),
