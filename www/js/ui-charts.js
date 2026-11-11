@@ -451,7 +451,7 @@ export function chartsBody(t, rerender) {
       h('button', { class: 'btn sec sm', title: 'Turunkan', disabled: i === list.length - 1, onclick: () => mv(i, 1) }, '↓'),
       h('button', { class: 'btn sec sm', onclick: () => { const c = entryOf(e); c.hidden = !c.hidden; bump('style'); rerender(); } }, hid ? 'Tampilkan' : 'Sembunyikan'),
       h('button', { class: 'btn sec sm', onclick: () => openChartEditor(t, e, headers, rerender) }, 'Ubah'),
-      S.themes.length > 1 && e.cfg ? h('button', { class: 'btn sec sm', title: 'Salin ke semua tema lain', onclick: () => {
+      false && e.cfg ? h('button', { class: 'btn sec sm', title: 'Salin ke semua tema lain', onclick: () => {
         let n = 0;
         for (const x of S.themes) {
           if (x === t) continue; x.charts = x.charts || [];

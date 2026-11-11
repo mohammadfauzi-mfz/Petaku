@@ -7,6 +7,7 @@ export const VERSION = '1.0';
 export const S = {
   layers: [],        // meta layer, urut dari bawah ke atas
   themes: [],
+  glob: null,
   themeId: null,
   dsList: [],        // semua dataset CSV
   dsActive: null,    // id dataset yang dipakai tema tanpa pilihan sendiri
@@ -27,7 +28,7 @@ Object.defineProperty(S, 'ds', { get() { return dsForTheme(S.themes.find((t) => 
 const listeners = new Set();
 export const onChange = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 export function emit(kind) { for (const f of listeners) try { f(kind); } catch (e) { console.error(e); } }
-export function bump(kind) { S.ver++; saveSoon(); emit(kind || 'style'); }
+export function bump(kind) { wireAll(); S.ver++; saveSoon(); emit(kind || 'style'); }
 
 // ---------------- default ----------------
 const TBM_STYLE = { fill: '#ffffff', pattern: 'dots', pc: '#00a01e' };
@@ -127,7 +128,9 @@ export const defSync = () => ({ repo: 'mohammadfauzi-mfz/Petaku', branch: 'main'
 export async function saveNow() {
   try {
     await dbSet('layers', S.layers.map((l) => Object.fromEntries(Object.entries(l).filter(([k]) => !k.startsWith('_')))));
+    wireAll();
     await dbSet('themes', S.themes);
+    await dbSet('glob', S.glob);
     await dbSet('themeId', S.themeId);
     await dbSet('cfg', S.cfg);
     await dbSet('dsList', S.dsList.map(slimDs));
@@ -146,6 +149,7 @@ export async function init() {
   } else S.layers = dl;
   const T = await dbGet('themes');
   S.themes = Array.isArray(T) && T.length ? T : defThemes();
+  S.glob = (await dbGet('glob')) || null;
   S.themeId = (await dbGet('themeId')) || S.themes[0].id;
   if (!S.themes.some((t) => t.id === S.themeId)) S.themeId = S.themes[0].id;
   S.cfg = { ...defCfg(), ...((await dbGet('cfg')) || {}) };
@@ -161,10 +165,41 @@ export async function init() {
   if (!S.dsList.some((d) => d.id === S.dsActive)) S.dsActive = S.dsList[0] ? S.dsList[0].id : null;
   healLevels();
   for (const t of S.themes) { if (t.dsId === undefined) t.dsId = ''; if (t.opacity === undefined) t.opacity = 100; }
+  wireAll();
   S.ver++;
 }
 
-export const theme = () => S.themes.find((t) => t.id === S.themeId) || S.themes[0];
+export const theme = () => { wireAll(); return S.themes.find((t) => t.id === S.themeId) || S.themes[0]; };
+
+// ---- pengaturan GLOBAL: tabel info lokasi, grafik info lokasi, aturan khusus/arsiran = satu untuk semua tema ----
+const GKEYS = ['tables', 'charts', 'rules'];
+const tabKey = (t) => (t.title || '') + '|' + (t.kind || '');
+export function wireAll() {
+  const own = (t, k) => { const d = Object.getOwnPropertyDescriptor(t, k); return d && 'value' in d && Array.isArray(d.value) ? d.value : null; };
+  if (!S.glob) {
+    S.glob = {};
+    const act = S.themes.find((t) => t.id === S.themeId) || S.themes[0];
+    const order = [act, ...S.themes.filter((t) => t !== act)].filter(Boolean);
+    for (const k of GKEYS) {
+      const out = [], seen = new Set();
+      for (const t of order) for (const it of own(t, k) || []) {
+        const key = k === 'charts' ? it.key : k === 'tables' ? tabKey(it) : it.id;
+        if (key != null && seen.has(key)) continue; if (key != null) seen.add(key);
+        out.push(it);
+      }
+      if (out.length || order.some((t) => own(t, k))) S.glob[k] = out;
+    }
+  }
+  if (!Array.isArray(S.glob.charts)) S.glob.charts = [];
+  if (!Array.isArray(S.glob.rules)) S.glob.rules = [];
+  for (const t of S.themes) {
+    for (const k of GKEYS) {
+      const d = Object.getOwnPropertyDescriptor(t, k);
+      if (d && d.get) continue;
+      Object.defineProperty(t, k, { get() { return S.glob[k]; }, set(v) { S.glob[k] = v; }, enumerable: false, configurable: true });
+    }
+  }
+}
 export const layerById = (id) => S.layers.find((l) => l.id === id);
 
 // ---------------- dataset ----------------

@@ -1,5 +1,5 @@
 // Sinkron data antar pengguna lewat repo GitHub (folder sync/) memakai GitHub Contents API
-import { S, saveNow, bump, emit, buildDs, putDataset, slimDs, loadLayer, healLevels } from './model.js';
+import { S, wireAll, saveNow, bump, emit, buildDs, putDataset, slimDs, loadLayer, healLevels } from './model.js';
 import { dbGet, dbSet, dbDel, bytesToBase64 } from './util.js';
 import { BUILD } from './version.js';
 
@@ -68,7 +68,7 @@ export async function push(scope, progress) {
       datasets: S.dsList.map((d) => { const s = slimDs(d); return { id: s.id, name: s.name, headers: s.headers, delimiter: s.delimiter, keyCol: s.keyCol, level: s.level, groupCol: s.groupCol, updatedAt: s.updatedAt, rows: s.rows.map((r) => s.headers.map((h) => r[h])) }; }),
     })]);
   }
-  if (scope.themes) files.push(['themes.json', JSON.stringify({ themes: S.themes, themeId: S.themeId })]);
+  if (scope.themes) files.push(['themes.json', JSON.stringify({ themes: S.themes, themeId: S.themeId, glob: S.glob })]);
   if (scope.layers) {
     files.push(['layers.json', JSON.stringify({ layers: S.layers.map(stripLayer) })]);
     for (const l of S.layers) {
@@ -132,8 +132,10 @@ export async function pull(scope, progress) {
     const t = await getText('themes.json');
     if (t) {
       const j = JSON.parse(t);
+      if (j.glob) S.glob = j.glob;
       for (const th of j.themes || []) { const i = S.themes.findIndex((x) => x.id === th.id); if (i >= 0) S.themes[i] = th; else S.themes.push(th); }
       if (j.themeId && S.themes.some((x) => x.id === j.themeId)) S.themeId = j.themeId;
+      wireAll();
       done.push(`${(j.themes || []).length} tema`);
     }
   }

@@ -166,7 +166,7 @@ function ruleEditor(t, r, i) {
     textInput(r.legendLabel, (v) => { r.legendLabel = v; touch(); }, { placeholder: 'Teks' }),
     h('button', { class: 'btn sec sm', onclick: () => { if (i > 0) { [t.rules[i - 1], t.rules[i]] = [t.rules[i], t.rules[i - 1]]; touch(); rerender(); } } }, '↑'),
     h('button', { class: 'btn sec sm', onclick: () => { if (i < t.rules.length - 1) { [t.rules[i + 1], t.rules[i]] = [t.rules[i], t.rules[i + 1]]; touch(); rerender(); } } }, '↓'),
-    S.themes.length > 1 ? h('button', { class: 'btn sec sm', title: 'Salin aturan ini ke semua tema lain', onclick: () => copyRules(t, [r]) }, 'Ke semua tema') : null));
+    false ? h('button', { class: 'btn sec sm', title: 'Salin aturan ini ke semua tema lain', onclick: () => copyRules(t, [r]) }, 'Ke semua tema') : null));
   return wrap;
 }
 

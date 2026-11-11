@@ -5,7 +5,7 @@ import { openSheet, confirmBox, textInput, colorInput, check, row as frow } from
 
 const MLAB = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 const METRIC = {
-  jjgpkk: { label: 'JJG/PKK', dec: 2 }, jjg: { label: 'JJG', dec: 0 }, tonha: { label: 'TON/HA', dec: 2 }, ton: { label: 'TON', dec: 0 }, bjr: { label: 'BJR', dec: 2 },
+  jjgpkk: { label: 'JJG/PKK', dec: 2 }, jjg: { label: 'JJG', dec: 0 }, tonha: { label: 'TON/HA', dec: 2 }, ton: { label: 'TON', dec: 0 }, kgpkk: { label: 'KG/PKK', dec: 2 }, bjr: { label: 'BJR', dec: 2 },
 };
 const empty = (v) => { const s = String(v == null ? '' : v).trim(); return s === '' || s === '-' || s.startsWith('#'); };
 function contrast(hex) {
@@ -212,7 +212,7 @@ function calcSides(t, row, from, to, ol) {
   const luas = numT(gf(row, t.luas)), pkk = numT(gf(row, t.pkk));
   const calc = (S_) => {
     const ton = sumRange(S_.ton, from, end), jjg = sumRange(S_.jjg, from, end);
-    return { ton, jjg, tonha: ton != null && luas ? ton / luas : null, jjgpkk: jjg != null && pkk ? jjg / pkk : null, bjr: ton != null && jjg ? ton * 1000 / jjg : null };
+    return { ton, jjg, tonha: ton != null && luas ? ton / luas : null, jjgpkk: jjg != null && pkk ? jjg / pkk : null, kgpkk: ton != null && pkk ? ton * 1000 / pkk : null, bjr: ton != null && jjg ? ton * 1000 / jjg : null };
   };
   return { a: calc(L), b: calc(R), end, fl, R0: sideSeries(t.right) };
 }
@@ -486,7 +486,7 @@ export function tablesBody(t, rerender) {
       h('button', { class: 'btn sec sm', title: 'Turunkan', disabled: ti === t.tables.length - 1, onclick: () => mv(1) }, '↓'),
       h('button', { class: 'btn sec sm', onclick: () => { tb.enabled = tb.enabled === false; bump('style'); rerender(); } }, tb.enabled === false ? 'Aktifkan' : 'Matikan'),
       h('button', { class: 'btn sec sm', onclick: () => openEditor(tb, rerender) }, 'Ubah'),
-      S.themes.length > 1 ? h('button', { class: 'btn sec sm', title: 'Salin ke semua tema lain', onclick: () => {
+      false ? h('button', { class: 'btn sec sm', title: 'Salin ke semua tema lain', onclick: () => {
         let n = 0;
         for (const x of S.themes) { if (x === t) continue; x.tables = x.tables || []; if (x.tables.some((y) => y.title === tb.title && y.kind === tb.kind)) continue; x.tables.push({ ...JSON.parse(JSON.stringify(tb)), id: 't' + uid() }); n++; }
         bump('style'); toast(n ? `Disalin ke ${n} tema` : 'Sudah ada di semua tema');
@@ -511,7 +511,7 @@ function aggSide(rowsData, from, to) {
     if (j != null) jjg = (jjg || 0) + j;
     luas += b.luas || 0; pkk += b.pkk || 0;
   }
-  return { ton, jjg, tonha: ton != null && luas ? ton / luas : null, jjgpkk: jjg != null && pkk ? jjg / pkk : null, bjr: ton != null && jjg ? ton * 1000 / jjg : null };
+  return { ton, jjg, tonha: ton != null && luas ? ton / luas : null, jjgpkk: jjg != null && pkk ? jjg / pkk : null, kgpkk: ton != null && pkk ? ton * 1000 / pkk : null, bjr: ton != null && jjg ? ton * 1000 / jjg : null };
 }
 // blocks: [{row}]; kembalikan {a, b, from, to} untuk satu kelompok
 export function aggCompare(t, blocks, from, to, ol) {
