@@ -43,6 +43,16 @@ function series(row, prefix) {
   if (!cols) return null;
   return cols.map((c) => (c ? numT(getField(row, c)) : null));
 }
+let TH = null; // tema aktif (dipakai untuk mencari sumber Outlook otomatis)
+// sumber bulan sisa untuk Outlook: t.fill, atau sisi "Plan" tabel ini, atau sisi Plan tabel lain yang aktualnya sama
+export function outlookSource(t) {
+  if (t.fill && (t.fill.ton || t.fill.jjg)) return { ton: t.fill.ton, jjg: t.fill.jjg, label: t.fill.label || 'Plan' };
+  const isP = (sd) => /plan/i.test((sd && sd.label) || '');
+  if (isP(t.left)) return { ton: t.left.ton, jjg: t.left.jjg, label: t.left.label };
+  for (const o of (TH && TH.tables) || []) if (o !== t && o.kind === 'compare' && o.enabled !== false && isP(o.left) && o.right && t.right && o.right.ton === t.right.ton) return { ton: o.left.ton, jjg: o.left.jjg, label: o.left.label };
+  return null;
+}
+const mergeOL = (act, fill, to) => Array.from({ length: 12 }, (_, i) => (i < to ? (act ? act[i] : null) : (fill ? fill[i] : null)));
 const lastMonth = (arr) => { let k = 0; if (arr) arr.forEach((v, i) => { if (v != null) k = i + 1; }); return k; };
 const sumRange = (arr, a, b) => { if (!arr) return null; let s = 0, n = 0; for (let i = a - 1; i < b; i++) if (arr[i] != null) { s += arr[i]; n++; } return n ? s : null; };
 
@@ -171,7 +181,7 @@ function rangeColor(t, pct) {
 const view = new Map();    // periode pilihan pengguna per tabel (sementara)
 function head(t, labels) {
   const bg = t.color || '#0b5d3b', fg = contrast(bg);
-  return h('thead', {}, h('tr', {}, labels.map((l) => h('th', { style: { background: bg, color: fg } }, l))));
+  return h('thead', {}, h('tr', {}, labels.map((l) => h('th', { style: { background: bg, color: fg, whiteSpace: 'pre-line' } }, l))));
 }
 function gridTable(t, row, props) {
   const body = h('tbody', {});
@@ -188,24 +198,37 @@ function gridTable(t, row, props) {
   if (!any) return null;
   return h('div', { class: 'tblwrap' }, h('table', { class: 'itab' }, head(t, t.cols || []), body));
 }
-function compareTable(t, row) {
-  const v = view.get(t.id) || {};
-  const sideSeries = (s) => ({ ton: series(row, s.ton), jjg: series(row, s.jjg) });
-  const L = sideSeries(t.left), R = sideSeries(t.right);
-  const from = v.from || t.from || 1;
-  const toSel = v.to != null ? v.to : t.to;
-  const to = toSel === 'auto' || toSel == null ? (lastMonth(R.ton) || lastMonth(R.jjg) || 12) : +toSel;
+function calcSides(t, row, from, to, ol) {
+  const fl = ol ? outlookSource(t) : null;
+  const sideSeries = (sd) => ({ ton: series(row, sd.ton), jjg: series(row, sd.jjg) });
+  const L = sideSeries(t.left); let R = sideSeries(t.right);
+  if (fl) { const F = sideSeries(fl); R = { ton: mergeOL(R.ton, F.ton, to), jjg: mergeOL(R.jjg, F.jjg, to) }; }
+  const end = fl ? 12 : to;
   const luas = numT(getField(row, t.luas)), pkk = numT(getField(row, t.pkk));
   const calc = (S_) => {
-    const ton = sumRange(S_.ton, from, to), jjg = sumRange(S_.jjg, from, to);
-    return {
-      ton, jjg,
-      tonha: ton != null && luas ? ton / luas : null,
-      jjgpkk: jjg != null && pkk ? jjg / pkk : null,
-      bjr: ton != null && jjg ? ton * 1000 / jjg : null,
-    };
+    const ton = sumRange(S_.ton, from, end), jjg = sumRange(S_.jjg, from, end);
+    return { ton, jjg, tonha: ton != null && luas ? ton / luas : null, jjgpkk: jjg != null && pkk ? jjg / pkk : null, bjr: ton != null && jjg ? ton * 1000 / jjg : null };
   };
-  const a = calc(L), b = calc(R);
+  return { a: calc(L), b: calc(R), end, fl, R0: sideSeries(t.right) };
+}
+const autoToRow = (t, row) => { const R = { ton: series(row, t.right.ton), jjg: series(row, t.right.jjg) }; return lastMonth(R.ton) || lastMonth(R.jjg) || 12; };
+// nilai Outlook satu baris metrik untuk satu blok (dipakai grafik)
+export function outlookValue(th, t, row, metric) {
+  TH = th;
+  const from = t.from || 1, to = t.to == null || t.to === 'auto' ? autoToRow(t, row) : +t.to;
+  const r = calcSides(t, row, from, to, true);
+  return r.fl ? r.b[metric || 'tonha'] : null;
+}
+export const METRIC_OPT = Object.keys(METRIC).map((k) => [k, METRIC[k].label]);
+function compareTable(t, row) {
+  const v = view.get(t.id) || {};
+  const from = v.from || t.from || 1;
+  const toSel = v.to != null ? v.to : t.to;
+  const to = toSel === 'auto' || toSel == null ? autoToRow(t, row) : +toSel;
+  const flAvail = outlookSource(t);
+  const ol = !!v.ol && !!flAvail;
+  const cs = calcSides(t, row, from, to, ol);
+  const a = cs.a, b = cs.b;
   const keys = (t.metrics || []).filter((k) => METRIC[k]);
   if (!keys.length || keys.every((k) => a[k] == null && b[k] == null)) return null;
   const body = h('tbody', {});
@@ -215,7 +238,8 @@ function compareTable(t, row) {
     body.append(h('tr', {}, h('td', { class: 'lft' }, METRIC[k].label), h('td', {}, fmtN(a[k], METRIC[k].dec)), h('td', {}, fmtN(b[k], METRIC[k].dec)),
       h('td', { style: bg ? { background: bg, color: contrast(bg), fontWeight: 700 } : { fontWeight: 700 } }, pct == null ? '' : Math.round(pct) + '%')));
   }
-  const per = from === 1 && to === 12 ? 'Jan–Des' : (from === to ? MLAB[from - 1] : `${MLAB[from - 1]}–${MLAB[to - 1]}`);
+  const end = cs.end;
+  const per = from === 1 && end === 12 ? 'Jan–Des' : (from === end ? MLAB[from - 1] : `${MLAB[from - 1]}–${MLAB[end - 1]}`);
   const wrap = h('div', {});
   // pilih periode
   const mo = MLAB.map((m, i) => [i + 1, m]);
@@ -224,8 +248,10 @@ function compareTable(t, row) {
     select(mo, from, (x) => { view.set(t.id, { ...(view.get(t.id) || {}), from: +x, to }); rerender(); }),
     h('span', { class: 'mut small' }, 's/d'),
     select(mo, to, (x) => { view.set(t.id, { ...(view.get(t.id) || {}), from, to: +x }); rerender(); }),
-    h('button', { class: 'btn sec sm', onclick: () => { view.delete(t.id); rerender(); } }, 'Otomatis'));
-  wrap.append(sel, h('div', { class: 'tblwrap' }, h('table', { class: 'itab' }, head(t, [per, t.left.label, t.right.label, '%']), body)));
+    h('button', { class: 'btn sec sm', onclick: () => { view.delete(t.id); rerender(); } }, 'Otomatis'),
+    flAvail && (to < 12 || ol) ? h('button', { class: 'btn' + (ol ? '' : ' sec') + ' sm', title: `Act ${MLAB[0]}–${MLAB[to - 1]} + ${flAvail.label} sisa bulan sampai Des`, onclick: () => { view.set(t.id, { ...(view.get(t.id) || {}), from, to, ol: !ol }); rerender(); } }, 'Outlook') : null);
+  const rLabel = ol ? `Outlook\n(Act ${MLAB[from - 1]}–${MLAB[to - 1]}${to < 12 ? ' + ' + flAvail.label + ' ' + MLAB[to] + '–Des' : ''})` : t.right.label;
+  wrap.append(sel, h('div', { class: 'tblwrap' }, h('table', { class: 'itab' }, head(t, [per, t.left.label, rLabel, '%']), body)));
   return wrap;
 }
 // kembalikan elemen tabel (atau null bila tidak ada data)
@@ -254,6 +280,7 @@ export function tableSourceCols(th, headers) {
   return out;
 }
 export function buildTables(th, row, props, where) {
+  TH = th;
   const out = [];
   if (!row) return out;
   for (const t of th.tables || []) {
@@ -386,6 +413,15 @@ function openEditor(t, done) {
       body.append(h('div', { style: { margin: '6px 0' } }, check(t.hideSrc !== false, (v) => { t.hideSrc = v; touch(); }, 'Sembunyikan data sumbernya dari "Data lainnya"')), h('div', { style: { margin: '6px 0' } }, check(!!t.top, (v) => { t.top = v; touch(); }, 'Tampilkan paling atas (di atas kotak ringkasan)')));
       side('Sisi kiri (pembanding / plan)', t.left);
       side('Sisi kanan (aktual)', t.right);
+      body.append(h('h4', {}, 'Outlook (isi bulan sisa)'));
+      body.append(h('div', { class: 'mut small' }, 'Tombol Outlook mengisi bulan setelah "s/d" dari sumber ini (mis. Plan BBC) sampai Des. Kosong = otomatis memakai sisi Plan (tabel ini, atau tabel Plan lain yang aktualnya sama).'));
+      const others = (theme().tables || []).filter((o) => o !== t && o.kind === 'compare');
+      body.append(frow('Ambil dari tabel', select([['', '— pilih —'], ...others.map((o) => [o.id, o.title + ' · sisi ' + o.left.label])], '', (v) => { const o = others.find((x) => x.id === v); if (o) { t.fill = { ton: o.left.ton, jjg: o.left.jjg, label: o.left.label }; touch(); draw(); } })));
+      const fl0 = t.fill || {};
+      const setFill = (k, v) => { t.fill = t.fill || {}; t.fill[k] = v; touch(); };
+      body.append(frow('Sumber Ton', textInput(fl0.ton || '', (v) => setFill('ton', v), { list: 'dl-tc', placeholder: 'otomatis' })));
+      body.append(frow('Sumber JJG', textInput(fl0.jjg || '', (v) => setFill('jjg', v), { list: 'dl-tc', placeholder: 'otomatis' })));
+      body.append(frow('Nama sumber', textInput(fl0.label || '', (v) => setFill('label', v), { placeholder: 'Plan' })));
       body.append(h('h4', {}, 'Pembagi'));
       body.append(frow('Kolom luas (ha)', textInput(t.luas, (v) => { t.luas = v; touch(); }, { list: 'dl-tc' })));
       body.append(frow('Kolom pokok', textInput(t.pkk, (v) => { t.pkk = v; touch(); }, { list: 'dl-tc' })));
@@ -440,7 +476,7 @@ export function tablesBody(t, rerender) {
 }
 
 // ---- rekap Plan vs Act per kelompok (mis. per afdeling): jumlahkan blok lalu hitung ulang rasio ----
-export const compareTables = (th) => (th.tables || []).filter((x) => x.kind === 'compare' && x.enabled !== false);
+export const compareTables = (th) => (TH = th, th.tables || []).filter((x) => x.kind === 'compare' && x.enabled !== false);
 function aggSide(rowsData, from, to) {
   let ton = null, jjg = null, luas = 0, pkk = 0;
   for (const b of rowsData) {
@@ -453,27 +489,33 @@ function aggSide(rowsData, from, to) {
   return { ton, jjg, tonha: ton != null && luas ? ton / luas : null, jjgpkk: jjg != null && pkk ? jjg / pkk : null, bjr: ton != null && jjg ? ton * 1000 / jjg : null };
 }
 // blocks: [{row}]; kembalikan {a, b, from, to} untuk satu kelompok
-export function aggCompare(t, blocks, from, to) {
-  const mk = (s) => blocks.map((x) => ({ ton: series(x.row, s.ton), jjg: series(x.row, s.jjg), luas: numT(getField(x.row, t.luas)), pkk: numT(getField(x.row, t.pkk)) }));
-  const L = mk(t.left), R = mk(t.right);
-  return { a: aggSide(L, from, to), b: aggSide(R, from, to) };
+export function aggCompare(t, blocks, from, to, ol) {
+  const fl = ol ? outlookSource(t) : null;
+  const mk = (s, f) => blocks.map((x) => {
+    let ton = series(x.row, s.ton), jjg = series(x.row, s.jjg);
+    if (f) { ton = mergeOL(ton, series(x.row, f.ton), to); jjg = mergeOL(jjg, series(x.row, f.jjg), to); }
+    return { ton, jjg, luas: numT(getField(x.row, t.luas)), pkk: numT(getField(x.row, t.pkk)) };
+  });
+  const L = mk(t.left), R = mk(t.right, fl), end = fl ? 12 : to;
+  return { a: aggSide(L, from, end), b: aggSide(R, from, end) };
 }
 export function autoTo(t, blocks) {
   let m = 0; for (const x of blocks) { const r = series(x.row, t.right.ton) || series(x.row, t.right.jjg); m = Math.max(m, lastMonth(r)); }
   return m || 12;
 }
 // groups: [{name, blocks}]; tabel lebar (geser ke samping), kolom pertama menempel
-export function recapTable(t, groups, from, to) {
+export function recapTable(t, groups, from, to, ol) {
+  const rlab = ol && outlookSource(t) ? 'Outlook' : t.right.label;
   const keys = (t.metrics || []).filter((k) => METRIC[k]);
   const pk = keys.filter((k) => (t.pct || []).includes(k));
   const bg = t.color || '#0b5d3b', fg = contrast(bg);
   const th = (txt, span, st) => h('th', { colspan: span || 1, style: { background: bg, color: fg, ...(st || {}) } }, txt);
-  const thead = h('thead', {}, h('tr', {}, th('', 1, { position: 'sticky', left: 0, zIndex: 2 }), th(t.left.label, keys.length), th(t.right.label, keys.length), pk.length ? th('%', pk.length) : null),
+  const thead = h('thead', {}, h('tr', {}, th('', 1, { position: 'sticky', left: 0, zIndex: 2 }), th(t.left.label, keys.length), th(rlab, keys.length), pk.length ? th('%', pk.length) : null),
     h('tr', {}, th('Wilayah', 1, { position: 'sticky', left: 0, zIndex: 2 }), ...keys.map((k) => th(METRIC[k].label)), ...keys.map((k) => th(METRIC[k].label)), ...pk.map((k) => th(METRIC[k].label))));
   const body = h('tbody', {});
   const all = [];
   const line = (name, blocks, total) => {
-    const { a, b } = aggCompare(t, blocks, from, to);
+    const { a, b } = aggCompare(t, blocks, from, to, ol);
     if (keys.every((k) => a[k] == null && b[k] == null)) return;
     const cells = [h('td', { class: 'lft stick' + (total ? ' tot' : '') }, name)];
     for (const k of keys) cells.push(h('td', {}, fmtN(a[k], METRIC[k].dec)));

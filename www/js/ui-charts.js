@@ -1,6 +1,7 @@
 // Grafik info lokasi: otomatis (bulanan & per-tahun) + pengaturan/kustom per tema (th.charts)
 import { S, getField, bump } from './model.js';
 import { h, num, uid, select, toast } from './util.js';
+import { compareTables, outlookValue, METRIC_OPT } from './ui-tables.js';
 import { openSheet, confirmBox, textInput, numInput, colorInput, check, row as frow } from './ui-common.js';
 
 // angka CSV: "3,449" = 3449 (ribuan), "15,60" = 15.6 (desimal koma)
@@ -119,6 +120,7 @@ export function resolveCharts(th, headers) {
 // ---------- penggambar ----------
 const YCOL = ['#9fb3c8', '#f2a541', '#8e7cc3', '#0b8f5a'];
 const TCOL = '#d6402a';
+const itemRaw = (row, it) => (it.val != null ? it.val : getField(row, it.col));
 const val = (cfg, v) => (v == null ? '' : cfg.dec != null && cfg.dec !== '' ? Number(v).toFixed(+cfg.dec) : fmtV(v));
 function scale(nums, cfg, nonZeroDef) {
   const tg = cfg.target != null && cfg.target !== '' ? +cfg.target : null;
@@ -139,20 +141,34 @@ function scale(nums, cfg, nonZeroDef) {
 
 // batang horizontal (satu seri)
 function hbarChart(items, row, cfg) {
-  let vals = items.map((it) => ({ tag: it.tag, raw: getField(row, it.col), v: numT(getField(row, it.col)) })).filter((x) => !HIDE_EMPTY(x.raw));
+  const vals = items.map((it) => ({ tag: it.tag, ol: !!it.ol, raw: itemRaw(row, it), v: numT(itemRaw(row, it)) })).filter((x) => !HIDE_EMPTY(x.raw));
   if (!vals.length) return null;
   const nums = vals.map((x) => x.v).filter((v) => v != null);
   const { lo, hi } = nums.length ? scale(nums, cfg, false) : { lo: 0, hi: 1 };
+  const mode = cfg.chg || 'arrow';
   const box = h('div', { class: 'bars' });
+  box.setAttribute('style', `--bl:${Math.max(34, Math.max(...vals.map((x) => String(x.tag).length)) * 8 + 6)}px;--bv:${mode === 'pct' ? 128 : mode === 'diff' ? 112 : 74}px`);
   const tg = cfg.target != null && cfg.target !== '' ? +cfg.target : null;
   vals.forEach((x, i) => {
     const w = x.v == null ? 0 : Math.max(2, Math.min(100, (x.v - lo) / (hi - lo) * 100));
     const prev = i > 0 ? vals[i - 1].v : null;
-    const trend = cfg.trend !== false && x.v != null && prev != null ? (x.v > prev ? ' ▲' : x.v < prev ? ' ▼' : '') : '';
-    const txt = cfg.labels === false ? '' : (cfg.dec != null && cfg.dec !== '' && x.v != null ? val(cfg, x.v) : String(x.raw).trim());
-    const bt = h('span', { class: 'bt' }, h('i', { style: { width: w + '%', ...(cfg.color ? { background: cfg.color } : {}) } }));
+    const has = x.v != null && prev != null && x.v !== prev;
+    const up = has && x.v > prev;
+    const arrow = has ? (up ? '▲' : '▼') : '';
+    const good = cfg.upGood === false ? !up : up;
+    const txt = cfg.labels === false ? '' : (cfg.dec != null && cfg.dec !== '' && x.v != null ? val(cfg, x.v) : (typeof x.raw === 'number' ? fmtV(x.raw) : String(x.raw).trim()));
+    const bv = h('span', { class: 'bv' }, txt);
+    if (cfg.trend !== false && has) {
+      if (mode === 'arrow') bv.append(' ' + arrow);
+      else {
+        const d = x.v - prev;
+        const t2 = mode === 'pct' ? (prev ? (d >= 0 ? '+' : '−') + Math.abs(d / prev * 100).toFixed(1) + '%' : '') : (d >= 0 ? '+' : '−') + val(cfg, Math.abs(d));
+        bv.append(' ', h('em', { class: 'chg ' + (good ? 'g' : 'b') }, arrow + ' ' + t2));
+      }
+    }
+    const bt = h('span', { class: 'bt' }, h('i', { class: x.ol ? 'ol' : '', style: { width: w + '%', ...(x.ol ? { background: 'repeating-linear-gradient(135deg,rgba(255,255,255,.6) 0 3px,transparent 3px 6px),' + (cfg.color || 'linear-gradient(90deg,#1f8a5b,#4fc08d)') } : cfg.color ? { background: cfg.color } : {}) } }));
     if (tg != null && isFinite(tg)) { const p = (tg - lo) / (hi - lo) * 100; if (p >= 0 && p <= 100) bt.append(h('b', { class: 'tgv', style: { left: p + '%' } })); }
-    box.append(h('div', { class: 'bar' }, h('span', { class: 'bl' }, x.tag), bt, h('span', { class: 'bv' }, txt + trend)));
+    box.append(h('div', { class: 'bar' }, h('span', { class: 'bl' }, x.tag), bt, bv));
   });
   return box;
 }
@@ -253,20 +269,26 @@ function ratioSets(d, row, cfg) {
 }
 
 // satu grafik -> elemen <details>, atau null jika tidak ada data
-export function renderChart(entry, row) {
+export function renderChart(entry, row, th) {
   const cfg = entry.cfg || {}, d = entry.desc;
   let body = null;
   if (d.type === 'month' || d.type === 'ratio') {
     const { sets, cut } = d.type === 'ratio' ? ratioSets(d, row, cfg) : monthSets(d.yrs, row, cfg);
     if (sets.length) body = colChart(MLAB, sets, cfg, cfg.kind === 'line' ? 'line' : 'vbar', { legend: true, avg: true, cut });
   } else {
-    const items = d.items.filter((it) => !HIDE_EMPTY(getField(row, it.col)));
+    const all = d.items.slice();
+    if (cfg.olTable && th) {
+      const tb = (th.tables || []).find((x) => x.id === cfg.olTable && x.kind === 'compare');
+      let ov = null; try { ov = tb ? outlookValue(th, tb, row, cfg.olMetric || 'tonha') : null; } catch (e) { console.error(e); }
+      if (ov != null) all.push({ tag: cfg.olLabel || 'OL', val: ov, ol: true });
+    }
+    const items = all.filter((it) => !HIDE_EMPTY(itemRaw(row, it)));
     if (!items.length) return null;
     const k = cfg.kind || 'hbar';
-    if (k === 'hbar') body = hbarChart(d.items, row, cfg);
+    if (k === 'hbar') body = hbarChart(all, row, cfg);
     else {
-      const vals = d.items.map((it) => { const raw = getField(row, it.col); return HIDE_EMPTY(raw) ? null : numT(raw); });
-      body = colChart(d.items.map((it) => it.tag), [{ name: d.title, vals, color: cfg.color || '#0b8f5a' }], cfg, k, {});
+      const vals = all.map((it) => { const raw = itemRaw(row, it); return HIDE_EMPTY(raw) ? null : numT(raw); });
+      body = colChart(all.map((it) => it.tag), [{ name: d.title, vals, color: cfg.color || '#0b8f5a' }], cfg, k, {});
     }
   }
   if (!body) return null;
@@ -287,7 +309,7 @@ export function buildCharts(th, row, headers) {
       if (d.type === 'items') for (const it of d.items) src.add(it.col);
       else for (const yrs of [d.num, d.den]) if (yrs) for (const [, mm] of yrs) for (const c of Object.values(mm)) src.add(c);
     }
-    let el = null; try { el = renderChart(e, row); } catch (err) { console.error(err); }
+    let el = null; try { el = renderChart(e, row, th); } catch (err) { console.error(err); }
     if (el) els.push(el);
   }
   return { els, rest: rest.filter((c) => !src.has(c)) };
@@ -348,7 +370,7 @@ function openChartEditor(t, entry, headers, done) {
     prev.innerHTML = ''; prev.append(h('div', { class: 'mut small' }, 'Pratinjau'));
     const row = sampleRow(); if (!row) { prev.append(h('div', { class: 'mut small' }, 'Belum ada blok berdata.')); return; }
     const e = resolveCharts(t, headers).list.find((x) => x.desc.key === entry.desc.key);
-    const el = e ? renderChart(e, row) : null;
+    const el = e ? renderChart(e, row, t) : null;
     if (el) { el.open = true; prev.append(el); } else prev.append(h('div', { class: 'mut small' }, 'Grafik kosong untuk blok ini (kolom belum cocok / tanpa data).'));
   };
   const c = cfg || {}, isM = entry.desc.type === 'month' || entry.desc.type === 'ratio';
@@ -391,7 +413,18 @@ function openChartEditor(t, entry, headers, done) {
     body.append(h('div', { style: { margin: '6px 0' } }, check(cc.labels !== false, (v) => { set('labels', v ? '' : false); }, 'Tampilkan angka pada grafik')));
     if (isMd) body.append(frow('Angka tahun', select([['last', 'Hanya tahun terbaru'], ['all', 'Semua tahun']], cc.labelAll === true ? 'all' : 'last', (v) => { set('labelAll', v === 'all' ? true : ''); })));
     body.append(frow('Desimal', numInput(cc.dec == null ? '' : cc.dec, (v) => { const n = parseInt(v, 10); set('dec', isFinite(n) && n >= 0 && n <= 4 ? n : ''); }, { placeholder: 'otomatis' })));
-    if (!isMd) body.append(h('div', { style: { margin: '6px 0' } }, check(cc.trend !== false, (v) => { set('trend', v ? '' : false); }, 'Tampilkan panah naik/turun (▲▼) untuk batang mendatar')));
+    if (!isMd) {
+      body.append(h('div', { style: { margin: '6px 0' } }, check(cc.trend !== false, (v) => { set('trend', v ? '' : false); }, 'Tampilkan panah naik/turun (▲▼) untuk batang mendatar')));
+      body.append(frow('Perubahan', select([['arrow', 'Panah saja'], ['pct', 'Panah + persen (vs batang sebelumnya)'], ['diff', 'Panah + selisih angka']], cc.chg || 'arrow', (v) => { set('chg', v === 'arrow' ? '' : v); })));
+      body.append(frow('Naik berarti', select([['good', 'Baik (hijau)'], ['bad', 'Buruk (merah)']], cc.upGood === false ? 'bad' : 'good', (v) => { set('upGood', v === 'bad' ? false : ''); })));
+      const cts = (t.tables || []).filter((x) => x.kind === 'compare');
+      body.append(h('div', { class: 'mut small' }, 'Batang Outlook: nilai estimasi dari tombol Outlook pada tabel perbandingan (Act sampai bulan terakhir + Plan sisa bulan), ditambahkan di ujung batang.'));
+      body.append(frow('Batang Outlook', select([['', 'Tidak ada'], ...cts.map((x) => [x.id, x.title])], cc.olTable || '', (v) => { set('olTable', v); draw(); })));
+      if (cc.olTable) {
+        body.append(frow('Baris', select(METRIC_OPT, cc.olMetric || 'tonha', (v) => { set('olMetric', v === 'tonha' ? '' : v); })));
+        body.append(frow('Label batang', textInput(cc.olLabel || '', (v) => { set('olLabel', v.trim()); }, { placeholder: 'OL' })));
+      }
+    }
     body.append(frow('Garis target', numInput(cc.target == null ? '' : cc.target, (v) => { const n = parseFloat(String(v).replace(',', '.')); set('target', isFinite(n) ? n : ''); }, { placeholder: 'kosong = tanpa garis' })));
     body.append(h('div', { style: { margin: '6px 0' } }, check(cc.open !== false && cc.open != null ? cc.open : false, (v) => { set('open', v ? true : ''); }, 'Selalu terbuka (tidak dilipat)')));
     body.append(prev);

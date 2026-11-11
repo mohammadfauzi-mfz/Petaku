@@ -106,7 +106,7 @@ canvas.prev{width:100%;border:1px solid var(--line);border-radius:8px;background
 .ic-sec summary{cursor:pointer;font-weight:700;font-size:13.5px;padding:3px 0}
 .ic-sec summary small{font-weight:400;color:var(--mut)}
 .bars{display:flex;flex-direction:column;gap:5px;margin-top:6px}
-.bar{display:grid;grid-template-columns:34px 1fr 74px;gap:8px;align-items:center;font-size:12.5px}
+.bar{display:grid;grid-template-columns:var(--bl,34px) 1fr var(--bv,74px);gap:8px;align-items:center;font-size:12.5px}
 .bar .bl{color:var(--mut)}
 .bar .bt{background:#e9eeeb;border-radius:6px;height:12px;overflow:hidden;display:block}
 .bar .bt i{display:block;height:100%;background:linear-gradient(90deg,var(--g2),#4fc08d);border-radius:6px}
@@ -212,3 +212,6 @@ h4{margin:12px 0 4px;font-size:13px}
 
 .mb .mv.sm{writing-mode:vertical-rl;transform:rotate(180deg);height:24px;font-size:7px;line-height:1;align-self:center}
 .mchart.tall{height:136px}
+
+.bar .bv{white-space:nowrap}.bar .bv .chg{font-style:normal;font-weight:700;font-size:11.5px}.chg.g{color:#0b8f5a}.chg.b{color:#d6402a}
+.bar .bl{white-space:nowrap}

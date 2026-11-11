@@ -2,7 +2,7 @@
 import { S, theme, getField, getProp, computeStats, filterActive, filterSummary, ensureStyles } from './model.js';
 import { h, num, select, toast } from './util.js';
 import { openSheet } from './ui-common.js';
-import { compareTables, recapTable, autoTo, recapGridTables, recapGrid } from './ui-tables.js';
+import { compareTables, recapTable, autoTo, recapGridTables, recapGrid, outlookSource } from './ui-tables.js';
 
 const fmt = (v) => { if (v == null || !isFinite(v)) return '–'; const a = Math.abs(v); return a >= 100 ? String(Math.round(v)) : a >= 10 ? String(Math.round(v * 10) / 10).replace('.', ',') : String(Math.round(v * 100) / 100).replace('.', ','); };
 const avg = (a) => a.reduce((x, y) => x + y, 0) / a.length;
@@ -60,7 +60,7 @@ export function openSummary() {
   const body = h('div', {});
   if (!items.length) { openSheet('Ringkasan', h('div', { class: 'hint' }, 'Belum ada blok berdata. Impor CSV dan pastikan kolom data tema sudah dipilih.')); return; }
   const numeric = t.mode !== 'category' && items.some((x) => x.v != null);
-  let groupBy = 'afd', sortBy = 'avgdesc', topN = 10, recapId = '', rFrom = 1, rTo = 'auto';
+  let groupBy = 'afd', sortBy = 'avgdesc', topN = 10, recapId = '', rFrom = 1, rTo = 'auto', rOl = false;
   const MLAB = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
   let recapRows = null;
 
@@ -127,13 +127,15 @@ export function openSummary() {
       const blocksAll = items.filter((x) => x.row).map((x) => ({ row: x.row, g: groupBy === 'estate' ? x.estate : x.afd }));
       const toN = rTo === 'auto' ? autoTo(ct, blocksAll) : +rTo;
       rc2.append(h('div', { class: 'perrow' }, h('span', { class: 'mut small' }, 'Periode'), select(mo, rFrom, (v) => { rFrom = +v; render(); }), h('span', { class: 'mut small' }, 's/d'), select(mo, toN, (v) => { rTo = +v; render(); }),
-        h('button', { class: 'btn sec sm', onclick: () => { rFrom = ct.from || 1; rTo = ct.to == null ? 'auto' : ct.to; render(); } }, 'Otomatis')));
+        h('button', { class: 'btn sec sm', onclick: () => { rFrom = ct.from || 1; rTo = ct.to == null ? 'auto' : ct.to; rOl = false; render(); } }, 'Otomatis'),
+        outlookSource(ct) && (toN < 12 || rOl) ? h('button', { class: 'btn' + (rOl ? '' : ' sec') + ' sm', onclick: () => { rTo = toN; rOl = !rOl; render(); } }, 'Outlook') : null));
       const gm = new Map();
       for (const x of blocksAll) { if (!gm.has(x.g)) gm.set(x.g, []); gm.get(x.g).push({ row: x.row }); }
       const gl = [...gm].map(([name, blocks]) => ({ name, blocks })).sort((a, b) => a.name.localeCompare(b.name, 'id', { numeric: true }));
-      const rt = recapTable(ct, gl, rFrom, toN);
-      recapRows = { title: ct.title, per: `${MLAB[rFrom - 1]}–${MLAB[toN - 1]}`, ct, ...rt };
-      rc2.append(h('div', { class: 'mut small' }, `Periode ${MLAB[rFrom - 1]}–${MLAB[toN - 1]}. Jumlah blok dijumlahkan dulu, lalu TON/HA, JJG/PKK, dan BJR dihitung ulang dari totalnya (bukan rata-rata antar blok).`), rt.el);
+      const olOn = rOl && !!outlookSource(ct);
+      const rt = recapTable(ct, gl, rFrom, toN, olOn);
+      recapRows = { title: ct.title + (olOn ? ' · Outlook' : ''), per: olOn ? `Act ${MLAB[rFrom - 1]}–${MLAB[toN - 1]} + ${outlookSource(ct).label} sisa bulan` : `${MLAB[rFrom - 1]}–${MLAB[toN - 1]}`, ct: olOn ? { ...ct, right: { ...ct.right, label: 'Outlook' } } : ct, ...rt };
+      rc2.append(h('div', { class: 'mut small' }, `Periode ${olOn ? 'Outlook: Act ' + MLAB[rFrom - 1] + '–' + MLAB[toN - 1] + ' + ' + outlookSource(ct).label + ' sisa bulan sampai Des' : MLAB[rFrom - 1] + '–' + MLAB[toN - 1]}. Jumlah blok dijumlahkan dulu, lalu TON/HA, JJG/PKK, dan BJR dihitung ulang dari totalnya (bukan rata-rata antar blok).`), rt.el);
       body.append(rc2);
     }
 
