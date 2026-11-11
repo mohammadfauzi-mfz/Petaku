@@ -93,8 +93,12 @@ function customDesc(cfg, headers) {
   if (cfg.mode === 'ratio') {
     const { monthly } = splitMonthly(headers);
     const f = (b) => monthly.find((g) => g.base === b);
-    const n = f(cfg.numBase), d = f(cfg.denBase);
-    return { key: cfg.key, type: 'ratio', title: cfg.title || 'Rasio bulanan', sub: ' per bulan', num: n ? n.yrs : null, den: d ? d.yrs : null, mult: cfg.mult == null || cfg.mult === '' ? 1 : +cfg.mult, custom: true };
+    const side = (v) => {
+      if (String(v || '').startsWith('col:')) { const c = headers.find((x) => x === v.slice(4)); if (!c) return null; const mm = {}; for (let m = 1; m <= 12; m++) mm[m] = c; return [['', mm]]; }
+      const g = f(v); return g ? g.yrs : null;
+    };
+    const n = { yrs: side(cfg.numBase) }, d = { yrs: side(cfg.denBase) };
+    return { key: cfg.key, type: 'ratio', title: cfg.title || 'Rasio bulanan', sub: ' per bulan', num: n.yrs, den: d.yrs, mult: cfg.mult == null || cfg.mult === '' ? 1 : +cfg.mult, custom: true };
   }
   const items = [], seen = new Set();
   const toks = String(cfg.cols || '').split(/[,\n;]+/).map((x) => x.trim()).filter(Boolean);
@@ -510,7 +514,8 @@ function openChartEditor(t, entry, headers, done) {
       body.append(prev); refresh(); return;
     }
     body.append(frow('Judul', textInput(cc.title || '', (v) => { set('title', v.trim() ? v : ''); }, { placeholder: entry.desc.title })));
-    const bases = splitMonthly(headers).monthly.map((g) => [g.base, g.base || '(tanpa nama)']);
+    const sm = splitMonthly(headers);
+    const bases = [...sm.monthly.map((g) => [g.base, g.base || '(tanpa nama)']), ...headers.filter((x) => !sm.consumed.has(x) && String(x).trim()).map((x) => ['col:' + x, 'Kolom tunggal: ' + String(x).trim()])];
     if (entry.desc.custom) {
       body.append(frow('Sumber', select([['cols', 'Kolom langsung dari CSV'], ['ratio', 'Hitung rasio dari data bulanan']], cc.mode || 'cols', (v) => {
         const c2 = ensure(); if (v === 'ratio') { c2.mode = 'ratio'; c2.kind = 'vbar'; if (c2.mult == null) c2.mult = 1000; if (!c2.numBase && bases[0]) c2.numBase = bases[0][0]; if (!c2.denBase && bases[1]) c2.denBase = bases[1][0]; } else { delete c2.mode; c2.kind = 'hbar'; }
