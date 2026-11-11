@@ -65,7 +65,7 @@ export async function push(scope, progress) {
   if (scope.data) {
     files.push(['datasets.json', JSON.stringify({
       active: S.dsActive,
-      datasets: S.dsList.map((d) => { const s = slimDs(d); return { id: s.id, name: s.name, headers: s.headers, delimiter: s.delimiter, keyCol: s.keyCol, level: s.level, groupCol: s.groupCol, updatedAt: s.updatedAt, rows: s.rows.map((r) => s.headers.map((h) => r[h])) }; }),
+      datasets: S.dsList.map((d) => { const s = slimDs(d); return { id: s.id, name: s.name, headers: s.headers, delimiter: s.delimiter, keyCol: s.keyCol, level: s.level, groupCol: s.groupCol, off: s.off, updatedAt: s.updatedAt, rows: s.rows.map((r) => s.headers.map((h) => r[h])) }; }),
     })]);
   }
   if (scope.themes) files.push(['themes.json', JSON.stringify({ themes: S.themes, themeId: S.themeId, glob: S.glob })]);
@@ -118,7 +118,7 @@ export async function pull(scope, progress) {
       for (const d of j.datasets || []) {
         const rows = d.rows.map((a) => { const o = {}; d.headers.forEach((h, k) => { o[h] = a[k] == null ? '' : a[k]; }); return o; });
         const ds = buildDs({ headers: d.headers, rows, delimiter: d.delimiter }, d.name, d.keyCol, d.id, d.updatedAt);
-        ds.level = d.level || ''; ds.groupCol = d.groupCol || '';
+        ds.level = d.level || ''; ds.groupCol = d.groupCol || ''; ds.off = !!d.off;
         const i = S.dsList.findIndex((x) => x.id === ds.id || x.name.toLowerCase() === ds.name.toLowerCase());
         if (i >= 0) { ds.id = S.dsList[i].id; S.dsList[i] = ds; } else S.dsList.push(ds);
       }

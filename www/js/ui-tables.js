@@ -352,7 +352,7 @@ function sampleFeat() {
   return null;
 }
 function headers(level) {
-  if (level === 'afd') { const set = new Set(); for (const d of S.dsList) if (d.level === 'afd') d.headers.forEach((x) => set.add(x)); return [...set]; }
+  if (level === 'afd') { const set = new Set(); for (const d of S.dsList) if (d.level === 'afd' && !d.off) d.headers.forEach((x) => set.add(x)); return [...set]; }
   return S.ds ? S.ds.headers : [];
 }
 function sampleAfd() {

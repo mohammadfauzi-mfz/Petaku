@@ -281,7 +281,7 @@ const CLS_COL = { A: '#00b0f0', B: '#92d050', C: '#ffff00', D: '#ff0000' };
 const CLS_LBL = { A: '> 125%', B: '110% – 125%', C: '100% – 109%', D: '< 100%' };
 const CLS_NOTE = 'Kelas = jumlah karyawan yang mencapai Basic: A (> 125%), B (110–125%), C (100–109%), D (< 100% = tidak mencapai Basic).';
 export function groupExtras() {
-  return S.dsList.filter((d) => d.level === 'afd' && d.groupCol).map((d) => ({ key: 'k:' + d.id, type: 'classes', title: String(d.name).replace(/\.[a-z0-9]+$/i, ''), sub: ' per bulan', dsId: d.id }));
+  return S.dsList.filter((d) => d.level === 'afd' && !d.off && d.groupCol).map((d) => ({ key: 'k:' + d.id, type: 'classes', title: String(d.name).replace(/\.[a-z0-9]+$/i, ''), sub: ' per bulan', dsId: d.id }));
 }
 function renderClasses(entry, ctx) {
   const cfg = entry.cfg || {}, d = entry.desc;
@@ -434,7 +434,7 @@ const AXIS = [['auto', 'Otomatis'], ['zero', 'Selalu mulai dari 0'], ['manual', 
 // kolom CSV blok + semua CSV afdeling (untuk daftar & editor grafik)
 function allHeaders() {
   const set = new Set(S.ds ? S.ds.headers : []);
-  for (const d of S.dsList) if (d.level === 'afd') d.headers.forEach((x) => set.add(x));
+  for (const d of S.dsList) if (d.level === 'afd' && !d.off) d.headers.forEach((x) => set.add(x));
   return [...set];
 }
 export function chartsBody(t, rerender) {

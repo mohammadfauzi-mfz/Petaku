@@ -40,8 +40,9 @@ function mergeDs(list) {
   return m;
 }
 export function dsForTheme(t) {
-  const blk = S.dsList.filter((x) => x.level !== 'afd');   // CSV tingkat afdeling tidak dipakai mewarnai blok
-  if (t && t.dsId) { const d = blk.find((x) => x.id === t.dsId); if (d) return d; }
+  const all = S.dsList.filter((x) => x.level !== 'afd');   // CSV tingkat afdeling tidak dipakai mewarnai blok
+  if (t && t.dsId) { const d = all.find((x) => x.id === t.dsId); if (d) return d; }   // pilihan eksplisit tetap dipakai walau saklarnya mati
+  const blk = all.filter((x) => !x.off);
   if (blk.length > 1) {
     const act = blk.find((x) => x.id === S.dsActive) || blk[0];
     return mergeDs([act, ...blk.filter((x) => x !== act)]);
@@ -148,7 +149,7 @@ export function defCfg() {
 // ---------------- persistensi ----------------
 let saveT;
 export function saveSoon() { clearTimeout(saveT); saveT = setTimeout(saveNow, 400); }
-export const slimDs = (d) => ({ id: d.id, name: d.name, headers: d.headers, rows: d.rows, keyCol: d.keyCol, delimiter: d.delimiter, level: d.level || '', groupCol: d.groupCol || '', updatedAt: d.updatedAt || 0 });
+export const slimDs = (d) => ({ id: d.id, name: d.name, headers: d.headers, rows: d.rows, keyCol: d.keyCol, delimiter: d.delimiter, level: d.level || '', groupCol: d.groupCol || '', off: !!d.off, updatedAt: d.updatedAt || 0 });
 export const defSync = () => ({ repo: 'mohammadfauzi-mfz/Petaku', branch: 'main', folder: 'sync', token: '', lastManifest: '', lastPull: 0, scope: { data: true, themes: true, layers: true, cfg: false }, lastUpdateCheck: 0 });
 export async function saveNow() {
   try {
@@ -181,7 +182,7 @@ export async function init() {
   S.sync = { ...defSync(), ...((await dbGet('sync')) || {}) };
   S.sync.scope = { ...defSync().scope, ...(S.sync.scope || {}) };
   const L2 = await dbGet('dsList');
-  if (Array.isArray(L2)) S.dsList = L2.filter((d) => d && d.rows).map((d) => { const x = buildDs(d, d.name, d.keyCol, d.id, d.updatedAt); x.level = d.level || ''; x.groupCol = d.groupCol || ''; return x; });
+  if (Array.isArray(L2)) S.dsList = L2.filter((d) => d && d.rows).map((d) => { const x = buildDs(d, d.name, d.keyCol, d.id, d.updatedAt); x.level = d.level || ''; x.groupCol = d.groupCol || ''; x.off = !!d.off; return x; });
   else {
     const old = await dbGet('ds');   // migrasi dari versi 1 CSV
     if (old && old.rows) S.dsList = [buildDs(old, old.name, old.keyCol)];
@@ -261,7 +262,7 @@ export function healLevels() {
   if (n) { const blk = S.dsList.filter((x) => x.level !== 'afd'); if (!blk.some((x) => x.id === S.dsActive)) S.dsActive = blk[0] ? blk[0].id : null; }
   return n;
 }
-export const afdDatasets = () => S.dsList.filter((d) => d.level === 'afd');
+export const afdDatasets = () => S.dsList.filter((d) => d.level === 'afd' && !d.off);
 // samakan penulisan afdeling: "Afd.04", "AFD 4", "Afdeling 4" -> "4"; "KT 1.1" -> "kt1.1"
 export function afdKey(v) {
   let t = String(v == null ? '' : v).trim().toLowerCase();

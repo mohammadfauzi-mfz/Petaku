@@ -127,7 +127,9 @@ export function renderData() {
     const by = usedBy(d);
     const item = h('div', { class: 'themeItem' + (cur && cur.id === d.id ? ' active' : ''), style: { flexWrap: 'wrap' } },
       h('div', { style: { flex: '1 1 100%', minWidth: 0 } },
-        h('div', { class: 'nm', style: { wordBreak: 'break-all' } }, d.name),
+        h('div', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+          h('div', { class: 'nm', style: { wordBreak: 'break-all', flex: 1, opacity: d.off ? 0.5 : 1 } }, d.name),
+          check(!d.off, (v) => { d.off = !v; bump('data'); renderData(); }, d.off ? 'Nonaktif' : 'Aktif')),
         h('div', { class: 'mut small' }, `${d.level === 'afd' ? 'TINGKAT AFDELING · ' : ''}${d.rows.length} baris · ${d.headers.length} kolom` + (d.level === 'afd' ? afdInfo(d) : by.length ? ' · dipakai: ' + by.join(', ') : ' · belum dipakai tema'))),
       h('button', { class: 'btn sec sm', onclick: () => { d.level = d.level === 'afd' ? '' : 'afd'; if (d.level === 'afd') { d.keyCol = afdKeyCol(d); d.groupCol = detectGroupCol(d); indexDs(d); } else { d.keyCol = autoKeyCol(d); indexDs(d); } bump('data'); renderData(); } }, d.level === 'afd' ? 'Ubah ke CSV blok' : 'Ubah ke CSV afdeling'),
       h('button', { class: 'btn sec sm', onclick: () => previewSheet(d) }, 'Lihat'),
