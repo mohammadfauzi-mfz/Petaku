@@ -121,7 +121,7 @@ export function resolveCharts(th, headers) {
 
 // ---------- penggambar ----------
 const YCOL = ['#c3ccd5', '#9fb3c8', '#f2a541', '#8e7cc3', '#0b8f5a'];
-const pickYears = (arr, cfg) => { const sel = Array.isArray(cfg.years) && cfg.years.length ? arr.filter((x) => cfg.years.includes(String(x.name))) : arr; const cut = !(Array.isArray(cfg.years) && cfg.years.length) && sel.length > 5 ? sel.length - 5 : 0; return { sets: sel.slice(cut), cut }; };
+const pickYears = (arr, cfg) => { const sel = Array.isArray(cfg.years) && cfg.years.length ? arr.filter((x) => cfg.years.includes(String(x.name))) : arr; const cut = !cfg._all && !(Array.isArray(cfg.years) && cfg.years.length) && sel.length > 5 ? sel.length - 5 : 0; return { sets: sel.slice(cut), cut }; };
 const TCOL = '#d6402a';
 const itemRaw = (row, it) => (it.val != null ? it.val : getField(row, it.col));
 const val = (cfg, v) => (v == null ? '' : cfg.dec != null && cfg.dec !== '' ? Number(v).toFixed(+cfg.dec) : fmtV(v));
@@ -272,12 +272,53 @@ function ratioSets(d, row, cfg) {
 }
 
 // satu grafik -> elemen <details>, atau null jika tidak ada data
+const yearView = new Map();   // pilihan tahun pengguna per grafik (sementara, selama aplikasi dibuka)
 export function renderChart(entry, row, th) {
-  const cfg = entry.cfg || {}, d = entry.desc;
+  const cfg0 = entry.cfg || {}, d = entry.desc;
+  const cfg = cfg0;
   let body = null;
   if (d.type === 'month' || d.type === 'ratio') {
-    const { sets, cut } = d.type === 'ratio' ? ratioSets(d, row, cfg) : monthSets(d.yrs, row, cfg);
-    if (sets.length) body = colChart(MLAB, sets, cfg, cfg.kind === 'line' ? 'line' : 'vbar', { legend: true, avg: true, cut });
+    const key = d.key, sel = yearView.get(key);
+    const setsOf = (c) => (d.type === 'ratio' ? ratioSets(d, row, c) : monthSets(d.yrs, row, c));
+    const avail = setsOf({ ...cfg, years: [], _all: true }).sets.map((x) => String(x.name));
+    const draw = () => {
+      const c = { ...cfg, years: yearView.get(key) && yearView.get(key).length ? yearView.get(key) : cfg.years };
+      const { sets, cut } = setsOf(c);
+      return sets.length ? colChart(MLAB, sets, c, c.kind === 'line' ? 'line' : 'vbar', { legend: true, avg: true, cut }) : null;
+    };
+    let cur = draw();
+    if (!cur) return null;
+    const holder = h('div', {}, cur);
+    const refresh = () => { const n = draw(); holder.innerHTML = ''; if (n) holder.append(n); };
+    const shown = () => { const v = yearView.get(key); const a = v && v.length ? v : (Array.isArray(cfg.years) && cfg.years.length ? cfg.years : avail.slice(-5)); return a.map(String); };
+    let selRow = null;
+    if (avail.length > 1) {
+      const panel = h('div', { class: 'yrpanel', style: { display: 'none' } });
+      const btn = h('button', { class: 'btn sec sm' }, '');
+      const upd = () => { const n = shown().length; btn.textContent = `Tahun (${n}/${avail.length}) ▾`; };
+      const fill = () => {
+        panel.innerHTML = '';
+        const cur2 = new Set(shown());
+        for (const y of avail) {
+          const inp = h('input', { type: 'checkbox', checked: cur2.has(y) });
+          inp.addEventListener('change', () => {
+            const now = new Set(shown()); if (inp.checked) now.add(y); else now.delete(y);
+            if (!now.size) { inp.checked = true; return; }
+            yearView.set(key, avail.filter((x) => now.has(x))); upd(); refresh();
+          });
+          panel.append(h('label', { class: 'yrchip' }, inp, y || 'Data'));
+        }
+        panel.append(h('button', { class: 'btn sec sm', onclick: () => { yearView.set(key, avail.slice()); fill(); upd(); refresh(); } }, 'Semua'),
+          h('button', { class: 'btn sec sm', onclick: () => { yearView.delete(key); fill(); upd(); refresh(); } }, 'Bawaan'));
+      };
+      btn.onclick = () => { const open = panel.style.display === 'none'; panel.style.display = open ? 'flex' : 'none'; if (open) fill(); };
+      upd();
+      selRow = h('div', { class: 'perrow' }, h('span', { class: 'mut small' }, 'Tampilkan tahun'), btn);
+      selRow.append(panel);
+    }
+    const title0 = cfg.title || d.title;
+    return h('details', { class: 'ic-sec', open: cfg.open != null ? cfg.open : true },
+      h('summary', {}, title0, h('small', {}, (d.sub || '') + (cfg.unit ? ' · ' + cfg.unit : ''))), selRow, holder);
   } else {
     const all = d.items.slice();
     if (cfg.olTable && th) {

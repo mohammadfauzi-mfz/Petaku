@@ -217,3 +217,5 @@ h4{margin:12px 0 4px;font-size:13px}
 .bar .bl{white-space:nowrap}
 
 .ictabs{display:flex;gap:6px;margin:0 0 8px;position:sticky;top:0;z-index:3;background:var(--card,#fff);padding:4px 0}.ictab{flex:1;border:1px solid var(--line);background:transparent;color:var(--tx);border-radius:10px;padding:8px 10px;font-weight:700;font-size:14px}.ictab.on{background:var(--g2,#0b5d3b);color:#fff;border-color:transparent}
+
+.perrow{flex-wrap:wrap}.yrpanel{flex:1 1 100%;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}.yrchip{display:flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:14px;padding:4px 10px;font-size:13px}
