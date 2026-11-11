@@ -279,13 +279,18 @@ export function renderChart(entry, row) {
 // semua grafik untuk satu blok; kembalikan {els, rest} (rest = kolom yang tidak jadi grafik)
 export function buildCharts(th, row, headers) {
   const { list, rest } = resolveCharts(th, headers);
-  const els = [];
+  const els = [], src = new Set();
   for (const e of list) {
     if (e.cfg && e.cfg.hidden) continue;
+    if (e.desc.custom && e.cfg.hideSrc !== false) {
+      const d = e.desc;
+      if (d.type === 'items') for (const it of d.items) src.add(it.col);
+      else for (const yrs of [d.num, d.den]) if (yrs) for (const [, mm] of yrs) for (const c of Object.values(mm)) src.add(c);
+    }
     let el = null; try { el = renderChart(e, row); } catch (err) { console.error(err); }
     if (el) els.push(el);
   }
-  return { els, rest };
+  return { els, rest: rest.filter((c) => !src.has(c)) };
 }
 
 // ---------- editor di tab Tema ----------
@@ -351,6 +356,7 @@ function openChartEditor(t, entry, headers, done) {
     body.innerHTML = '';
     const cc = cfg || {}, isMd = isM || cc.mode === 'ratio';
     body.append(h('datalist', { id: 'dl-ch' }, headers.map((x) => h('option', { value: x }))));
+    if (entry.desc.custom) body.append(h('div', { style: { margin: '6px 0' } }, check(cc.hideSrc !== false, (v) => { set('hideSrc', v ? '' : false); }, 'Sembunyikan data sumbernya dari "Data lainnya"')));
     body.append(frow('Judul', textInput(cc.title || '', (v) => { set('title', v.trim() ? v : ''); }, { placeholder: entry.desc.title })));
     const bases = splitMonthly(headers).monthly.map((g) => [g.base, g.base || '(tanpa nama)']);
     if (entry.desc.custom) {
