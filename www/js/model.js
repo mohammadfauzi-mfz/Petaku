@@ -122,7 +122,7 @@ export function defCfg() {
 // ---------------- persistensi ----------------
 let saveT;
 export function saveSoon() { clearTimeout(saveT); saveT = setTimeout(saveNow, 400); }
-export const slimDs = (d) => ({ id: d.id, name: d.name, headers: d.headers, rows: d.rows, keyCol: d.keyCol, delimiter: d.delimiter, level: d.level || '', updatedAt: d.updatedAt || 0 });
+export const slimDs = (d) => ({ id: d.id, name: d.name, headers: d.headers, rows: d.rows, keyCol: d.keyCol, delimiter: d.delimiter, level: d.level || '', groupCol: d.groupCol || '', updatedAt: d.updatedAt || 0 });
 export const defSync = () => ({ repo: 'mohammadfauzi-mfz/Petaku', branch: 'main', folder: 'sync', token: '', lastManifest: '', lastPull: 0, scope: { data: true, themes: true, layers: true, cfg: false }, lastUpdateCheck: 0 });
 export async function saveNow() {
   try {
@@ -152,7 +152,7 @@ export async function init() {
   S.sync = { ...defSync(), ...((await dbGet('sync')) || {}) };
   S.sync.scope = { ...defSync().scope, ...(S.sync.scope || {}) };
   const L2 = await dbGet('dsList');
-  if (Array.isArray(L2)) S.dsList = L2.filter((d) => d && d.rows).map((d) => { const x = buildDs(d, d.name, d.keyCol, d.id, d.updatedAt); x.level = d.level || ''; return x; });
+  if (Array.isArray(L2)) S.dsList = L2.filter((d) => d && d.rows).map((d) => { const x = buildDs(d, d.name, d.keyCol, d.id, d.updatedAt); x.level = d.level || ''; x.groupCol = d.groupCol || ''; return x; });
   else {
     const old = await dbGet('ds');   // migrasi dari versi 1 CSV
     if (old && old.rows) S.dsList = [buildDs(old, old.name, old.keyCol)];
@@ -188,6 +188,7 @@ const AFD_HDR = /^(afd|afdeling)\b/i;
 export function healLevels() {
   let n = 0;
   for (const d of S.dsList) {
+    if (d.level === 'afd' && d.groupCol === undefined) d.groupCol = detectGroupCol(d);
     const afdLike = AFD_HDR.test(String(d.headers[0] || '').trim());
     if (d.level !== 'afd' && afdLike && d.rows.length <= 100) { d.level = 'afd'; d.keyCol = afdKeyCol(d); indexDs(d); n++; }
     else if (d.level === 'afd' && !afdLike && !d.headers.some((x) => AFD_HDR.test(String(x).trim())) && d.rows.length > 100) { d.level = ''; d.keyCol = autoKeyCol(d); indexDs(d); n++; }
@@ -205,6 +206,21 @@ export function afdKey(v) {
 }
 // kolom kunci afdeling: header "Afd"/"Afdeling", kalau tidak ada kolom pertama
 export const afdKeyCol = (ds) => ds.headers.find((h) => /^(afd|afdeling)\b/i.test(String(h).trim())) || ds.headers[0];
+// kolom pengelompokan (mis. KELAS): satu afdeling punya beberapa baris. Otomatis bila nama kolom KELAS/CLASS/GRUP atau kunci afdeling berulang.
+export function detectGroupCol(ds) {
+  const kc = afdKeyCol(ds);
+  const byName = ds.headers.find((h) => h !== kc && /^(kelas|class|grup|group|kategori)$/i.test(String(h).trim()));
+  if (byName) return byName;
+  const seen = new Set(); let dup = false;
+  for (const r of ds.rows) { const k = afdKey(r[kc]); if (!k) continue; if (seen.has(k)) { dup = true; break; } seen.add(k); }
+  if (!dup) return '';
+  for (const h of ds.headers) { if (h === kc) continue; const vals = new Set(ds.rows.map((r) => String(r[h] == null ? '' : r[h]).trim()).filter(Boolean)); if (vals.size > 1 && vals.size <= 8 && [...vals].every((v) => isNaN(parseFloat(v)))) return h; }
+  return '';
+}
+export function afdRows(ds, name) {
+  const kc = afdKeyCol(ds), k = afdKey(name);
+  return ds.rows.filter((r) => afdKey(r[kc]) === k);
+}
 export function afdRow(ds, name) {
   if (!ds._amap || ds._amapN !== ds.rows.length) {
     ds._amap = new Map(); const kc = afdKeyCol(ds);
@@ -216,14 +232,22 @@ export function afdRow(ds, name) {
 // gabungan semua CSV afdeling untuk satu afdeling -> {row, headers, hmap, rows:[row], names, miss}; null bila tidak ada CSV afdeling
 export function afdCombined(afdName) {
   const list = afdDatasets(); if (!list.length) return null;
-  const row = {}, headers = [], hmap = {}, names = []; let hit = 0;
+  const row = {}, headers = [], hmap = {}, names = [], groups = new Map(); let hit = 0;
   for (const d of list) {
+    if (d.groupCol) {   // beberapa baris per afdeling (mis. kelas A-D)
+      const rs = afdRows(d, afdName); if (!rs.length) continue;
+      hit++; names.push(d.name);
+      const rowsBy = {}, order = [];
+      for (const r of rs) { const g = String(r[d.groupCol] == null ? '' : r[d.groupCol]).trim(); if (!g) continue; if (!(g in rowsBy)) { rowsBy[g] = r; order.push(g); } }
+      groups.set(d.id, { ds: d, rows: rowsBy, keys: order.sort(), headers: d.headers.filter((x) => x !== afdKeyCol(d) && x !== d.groupCol) });
+      continue;
+    }
     const r = afdRow(d, afdName); if (!r) continue;
     hit++; names.push(d.name);
     const kc = afdKeyCol(d);
     for (const hd of d.headers) { if (hd === kc && headers.includes(hd)) continue; if (!(hd in row)) { headers.push(hd); hmap[String(hd).toLowerCase().trim()] = hd; } row[hd] = r[hd]; }
   }
-  return { row: hit ? row : null, headers, hmap, rows: hit ? [row] : [], names, keyCol: list[0] ? afdKeyCol(list[0]) : '', total: list.length, hit, id: '_afd' };
+  return { row: hit ? row : null, groups, headers, hmap, rows: hit ? [row] : [], names, keyCol: list[0] ? afdKeyCol(list[0]) : '', total: list.length, hit, id: '_afd' };
 }
 export function removeDataset(id) {
   S.dsList = S.dsList.filter((d) => d.id !== id);

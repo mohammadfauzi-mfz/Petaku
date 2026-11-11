@@ -1,5 +1,5 @@
 // Grafik info lokasi: otomatis (bulanan & per-tahun) + pengaturan/kustom per tema (th.charts)
-import { S, getField, bump } from './model.js';
+import { S, getField, bump, afdCombined } from './model.js';
 import { h, num, uid, select, toast } from './util.js';
 import { compareTables, outlookValue, onTableView, METRIC_OPT } from './ui-tables.js';
 import { openSheet, confirmBox, textInput, numInput, colorInput, check, row as frow } from './ui-common.js';
@@ -80,11 +80,12 @@ function groupColumns(cols) {
 }
 
 // ---------- daftar grafik ----------
-export function chartDescs(headers) {
+export function chartDescs(headers, extras) {
   const { monthly, consumed } = splitMonthly(headers);
   const descs = monthly.map((g) => ({ key: 'm:' + g.base, type: 'month', title: g.base || 'Bulanan', sub: ' per bulan', yrs: g.yrs }));
   const { grouped, rest } = groupColumns(headers.filter((c) => !consumed.has(c)));
   for (const g of grouped) descs.push({ key: 'g:' + g.name, type: 'items', title: g.name, sub: ` ${g.items.length} tahun`, items: g.items.slice().sort((a, b) => String(a.tag).localeCompare(String(b.tag), undefined, { numeric: true })) });
+  for (const x of extras || []) descs.push(x);
   return { descs, rest };
 }
 // kolom kustom: "Ton Act 2026, Luas" -> tiap koma = kolom persis, atau awalan (semua kolom yang diawali teks itu)
@@ -108,8 +109,8 @@ function customDesc(cfg, headers) {
   }
   return { key: cfg.key, type: 'items', title: cfg.title || 'Grafik', sub: items.length ? ` ${items.length} data` : ' (kolom belum cocok)', items, custom: true };
 }
-export function resolveCharts(th, headers) {
-  const { descs, rest } = chartDescs(headers || []);
+export function resolveCharts(th, headers, extras) {
+  const { descs, rest } = chartDescs(headers || [], extras);
   const ov = th.charts || [], list = [], used = new Set();
   for (const o of ov) {
     if (o.custom) list.push({ cfg: o, desc: customDesc(o, headers || []) });
@@ -271,9 +272,60 @@ function ratioSets(d, row, cfg) {
   return { sets, cut };
 }
 
+// ---------- grafik kelas: batang bertumpuk 100% per bulan + tabel ----------
+const CLS_COL = { A: '#00b0f0', B: '#92d050', C: '#ffff00', D: '#ff0000' };
+const CLS_LBL = { A: '> 125%', B: '110% – 125%', C: '100% – 109%', D: '< 100%' };
+const CLS_NOTE = 'Kelas = jumlah karyawan yang mencapai Basic: A (> 125%), B (110–125%), C (100–109%), D (< 100% = tidak mencapai Basic).';
+export function groupExtras() {
+  return S.dsList.filter((d) => d.level === 'afd' && d.groupCol).map((d) => ({ key: 'k:' + d.id, type: 'classes', title: String(d.name).replace(/\.[a-z0-9]+$/i, ''), sub: ' per bulan', dsId: d.id }));
+}
+function renderClasses(entry, ctx) {
+  const cfg = entry.cfg || {}, d = entry.desc;
+  const g = ctx && ctx.groups && ctx.groups.get(d.dsId); if (!g) return null;
+  const { monthly } = splitMonthly(g.headers); if (!monthly.length) return null;
+  const base = monthly.slice().sort((a, b) => b.yrs.reduce((n, y) => n + Object.keys(y[1]).length, 0) - a.yrs.reduce((n, y) => n + Object.keys(y[1]).length, 0))[0];
+  const keys = ['A', 'B', 'C', 'D'].filter((k) => g.keys.includes(k)).concat(g.keys.filter((k) => !'ABCD'.includes(k)));
+  if (!keys.length) return null;
+  const ykey = d.key + ':y';
+  const years = base.yrs.map((y) => y[0]);
+  const draw = () => {
+    const yr = years.includes(yearView.get(ykey)) ? yearView.get(ykey) : years[years.length - 1];
+    const mm = (base.yrs.find((y) => y[0] === yr) || base.yrs[0])[1];
+    let anyPct = false, mx = 0;
+    const raw = {}; for (const k of keys) { raw[k] = []; for (let m = 1; m <= 12; m++) { const r = mm[m] ? g.rows[k][mm[m]] : null; const t = r == null ? '' : String(r).trim(); if (t === '' || t === '-') { raw[k].push(null); continue; } const n = numT(t); if (/%/.test(t)) anyPct = true; if (n != null) mx = Math.max(mx, n); raw[k].push(n); } }
+    const scale = !anyPct && mx <= 1 ? 100 : 1;
+    const vals = {}; for (const k of keys) vals[k] = raw[k].map((v) => (v == null ? null : v * scale));
+    let last = 0; for (let m = 0; m < 12; m++) if (keys.some((k) => vals[k][m] != null)) last = m + 1;
+    if (!last) return null;
+    const col = (k) => (cfg.classColors && cfg.classColors[k]) || CLS_COL[k] || '#999';
+    const lbl = (k) => (cfg.classLabels && cfg.classLabels[k]) || CLS_LBL[k] || '';
+    const dec = cfg.dec != null && cfg.dec !== '' ? +cfg.dec : 0;
+    const fmt = (v) => (v == null ? '' : v.toFixed(dec) + '%');
+    const H = 110;
+    const chart = h('div', { class: 'clsbars', style: { gridTemplateColumns: `repeat(${last},1fr)`, height: H + 'px' } });
+    for (let m = 0; m < last; m++) {
+      const tot = keys.reduce((n, k) => n + (vals[k][m] || 0), 0);
+      const colEl = h('div', { class: 'clscol' });
+      if (tot > 0) for (const k of keys) { const v = vals[k][m]; if (v) colEl.append(h('i', { style: { height: (v / tot * 100) + '%', background: col(k) }, title: `${k} ${fmt(v)}` })); }
+      chart.append(colEl);
+    }
+    const head = h('tr', {}, h('th', {}, ''), ...Array.from({ length: last }, (_, m) => h('th', {}, MLAB[m])));
+    const rows = keys.slice().reverse().map((k) => h('tr', {}, h('td', { class: 'lft' }, h('span', { class: 'clsdot', style: { background: col(k) } }), k), ...Array.from({ length: last }, (_, m) => h('td', {}, fmt(vals[k][m])))));
+    const leg = h('div', { class: 'mleg' }, ...keys.map((k) => h('span', { class: 'mly' }, h('i', { style: { background: col(k) } }), h('b', {}, k), ' ' + lbl(k))));
+    const note = cfg.note == null ? CLS_NOTE : cfg.note;
+    return h('div', {}, chart, h('div', { class: 'tblwrap' }, h('table', { class: 'itab cls' }, h('thead', {}, head), h('tbody', {}, rows))), leg, note ? h('div', { class: 'mut small' }, note) : null);
+  };
+  const first = draw(); if (!first) return null;
+  const holder = h('div', {}, first);
+  const sel = years.length > 1 && years.some((y) => y) ? h('div', { class: 'perrow' }, h('span', { class: 'mut small' }, 'Tahun'),
+    select(years.map((y) => [y, y || 'Data']), years.includes(yearView.get(ykey)) ? yearView.get(ykey) : years[years.length - 1], (v) => { yearView.set(ykey, v); const n = draw(); holder.innerHTML = ''; if (n) holder.append(n); })) : null;
+  return h('details', { class: 'ic-sec', open: cfg.open != null ? cfg.open : true }, h('summary', {}, cfg.title || d.title, h('small', {}, (d.sub || ''))), sel, holder);
+}
+
 // satu grafik -> elemen <details>, atau null jika tidak ada data
 const yearView = new Map();   // pilihan tahun pengguna per grafik (sementara, selama aplikasi dibuka)
-export function renderChart(entry, row, th) {
+export function renderChart(entry, row, th, ctx) {
+  if (entry.desc.type === 'classes') return renderClasses(entry, ctx);
   const cfg0 = entry.cfg || {}, d = entry.desc;
   const cfg = cfg0;
   let body = null;
@@ -343,8 +395,8 @@ export function renderChart(entry, row, th) {
 }
 
 // semua grafik untuk satu blok; kembalikan {els, rest} (rest = kolom yang tidak jadi grafik)
-export function buildCharts(th, row, headers) {
-  const { list, rest } = resolveCharts(th, headers);
+export function buildCharts(th, row, headers, ctx) {
+  const { list, rest } = resolveCharts(th, headers, ctx ? groupExtras() : []);
   const els = [], src = new Set();
   for (const e of list) {
     if (e.cfg && e.cfg.hidden) continue;
@@ -353,7 +405,7 @@ export function buildCharts(th, row, headers) {
       if (d.type === 'items') for (const it of d.items) src.add(it.col);
       else for (const yrs of [d.num, d.den]) if (yrs) for (const [, mm] of yrs) for (const c of Object.values(mm)) src.add(c);
     }
-    let el = null; try { el = renderChart(e, row, th); } catch (err) { console.error(err); }
+    let el = null; try { el = renderChart(e, row, th, ctx); } catch (err) { console.error(err); }
     if (el) {
       els.push(el);
       // batang Outlook ikut berubah saat periode (s/d) tabel diubah
@@ -387,9 +439,9 @@ export function chartsBody(t, rerender) {
   const headers = allHeaders();
   box.append(h('div', { class: 'mut small' }, 'Grafik yang tampil di info lokasi. Bawaannya otomatis dari kolom CSV; ubah hanya yang perlu. Urutan di daftar = urutan tampil.'));
   if (!headers.length) box.append(h('div', { class: 'mut small' }, 'Impor CSV dulu (tab Data) agar grafik otomatis terdaftar.'));
-  const { list } = resolveCharts(t, headers);
+  const { list } = resolveCharts(t, headers, groupExtras());
   const entryOf = (e) => { if (e.cfg) return e.cfg; const c = { key: e.desc.key }; t.charts.push(c); return c; };
-  const materialize = () => { const { list: l2 } = resolveCharts(t, headers); const out = []; for (const e of l2) out.push(e.cfg || { key: e.desc.key }); t.charts = out; };
+  const materialize = () => { const { list: l2 } = resolveCharts(t, headers, groupExtras()); const out = []; for (const e of l2) out.push(e.cfg || { key: e.desc.key }); t.charts = out; };
   const mv = (i, dlt) => { const j = i + dlt; if (j < 0 || j >= list.length) return; materialize(); [t.charts[i], t.charts[j]] = [t.charts[j], t.charts[i]]; bump('style'); rerender(); };
   list.forEach((e, i) => {
     const hid = e.cfg && e.cfg.hidden;
@@ -414,7 +466,7 @@ export function chartsBody(t, rerender) {
   box.append(h('button', { class: 'btn', style: { marginTop: '8px' }, onclick: () => {
     const c = { key: 'c:' + uid(), custom: true, title: 'Grafik baru', cols: '', kind: 'hbar' };
     t.charts.push(c); bump('style'); rerender();
-    const e = resolveCharts(t, headers).list.find((x) => x.cfg === c); openChartEditor(t, e, headers, rerender);
+    const e = resolveCharts(t, headers, groupExtras()).list.find((x) => x.cfg === c); openChartEditor(t, e, headers, rerender);
   } }, '+ Grafik buatan sendiri'));
   return box;
 }
@@ -427,12 +479,16 @@ function openChartEditor(t, entry, headers, done) {
   const prev = h('div', { class: 'prevbox' });
   const set = (k, v) => { const c = ensure(); if (v === '' || v == null) delete c[k]; else c[k] = v; bump('style'); refresh(); };
   const sampleRow = () => { for (const l of S.layers) { const rt = S.rt.get(l.id); const f = rt && rt.feats && rt.feats.find((x) => x._row); if (f) return f._row; } return null; };
+  const sampleCtx = () => { for (const l of S.layers) { const rt = S.rt.get(l.id); const f = rt && rt.feats && rt.feats.find((x) => x.props && (x.props.Afdeling || x.props.afdeling) && afdCombined(x.props.Afdeling || x.props.afdeling) && afdCombined(x.props.Afdeling || x.props.afdeling).hit); if (f) return afdCombined(f.props.Afdeling || f.props.afdeling); } return null; };
   const refresh = () => {
     prev.innerHTML = ''; prev.append(h('div', { class: 'mut small' }, 'Pratinjau'));
-    const row = sampleRow(); if (!row) { prev.append(h('div', { class: 'mut small' }, 'Belum ada blok berdata.')); return; }
-    const e = resolveCharts(t, headers).list.find((x) => x.desc.key === entry.desc.key);
-    const el = e ? renderChart(e, row, t) : null;
-    if (el) { el.open = true; prev.append(el); } else prev.append(h('div', { class: 'mut small' }, 'Grafik kosong untuk blok ini (kolom belum cocok / tanpa data).'));
+    const e = resolveCharts(t, headers, groupExtras()).list.find((x) => x.desc.key === entry.desc.key);
+    if (!e) { prev.append(h('div', { class: 'mut small' }, 'Grafik tidak ditemukan.')); return; }
+    let el = null;
+    const row = sampleRow(), ac = sampleCtx();
+    if (row && entry.desc.type !== 'classes') { try { el = renderChart(e, row, t); } catch (er) { console.error(er); } }
+    if (!el && ac) { try { el = renderChart(e, ac.row || {}, t, ac); } catch (er) { console.error(er); } }
+    if (el) { el.open = true; prev.append(el); } else prev.append(h('div', { class: 'mut small' }, row || ac ? 'Grafik kosong untuk contoh ini (kolom belum cocok / tanpa data).' : 'Belum ada blok berdata.'));
   };
   const c = cfg || {}, isM = entry.desc.type === 'month' || entry.desc.type === 'ratio';
   const draw = () => {
@@ -440,6 +496,19 @@ function openChartEditor(t, entry, headers, done) {
     const cc = cfg || {}, isMd = isM || cc.mode === 'ratio';
     body.append(h('datalist', { id: 'dl-ch' }, headers.map((x) => h('option', { value: x }))));
     if (entry.desc.custom) body.append(h('div', { style: { margin: '6px 0' } }, check(cc.hideSrc !== false, (v) => { set('hideSrc', v ? '' : false); }, 'Sembunyikan data sumbernya dari "Data lainnya"')));
+    if (entry.desc.type === 'classes') {
+      body.append(frow('Judul', textInput(cc.title || '', (v) => { set('title', v.trim() ? v : ''); }, { placeholder: entry.desc.title })));
+      body.append(h('div', { class: 'mut small' }, 'Warna dan keterangan tiap kelas (mis. A = lebih dari 125% basic).'));
+      for (const k of ['A', 'B', 'C', 'D']) {
+        body.append(h('div', { class: 'cellrow' }, h('span', { style: { width: '22px', fontWeight: 700 } }, k),
+          colorInput((cc.classColors && cc.classColors[k]) || CLS_COL[k], (v) => { const c2 = ensure(); c2.classColors = { ...(c2.classColors || {}), [k]: v }; bump('style'); refresh(); }),
+          textInput((cc.classLabels && cc.classLabels[k]) || CLS_LBL[k], (v) => { const c2 = ensure(); c2.classLabels = { ...(c2.classLabels || {}), [k]: v }; bump('style'); refresh(); }, { placeholder: CLS_LBL[k] })));
+      }
+      body.append(frow('Catatan', textInput(cc.note == null ? CLS_NOTE : cc.note, (v) => { set('note', v); })));
+      body.append(frow('Desimal', numInput(cc.dec == null ? '' : cc.dec, (v) => { const n = parseInt(v, 10); set('dec', isFinite(n) && n >= 0 && n <= 2 ? n : ''); }, { placeholder: '0' })));
+      body.append(h('div', { style: { margin: '6px 0' } }, check(cc.open !== false && cc.open != null ? cc.open : false, (v) => { set('open', v ? true : ''); }, 'Selalu terbuka (tidak dilipat)')));
+      body.append(prev); refresh(); return;
+    }
     body.append(frow('Judul', textInput(cc.title || '', (v) => { set('title', v.trim() ? v : ''); }, { placeholder: entry.desc.title })));
     const bases = splitMonthly(headers).monthly.map((g) => [g.base, g.base || '(tanpa nama)']);
     if (entry.desc.custom) {

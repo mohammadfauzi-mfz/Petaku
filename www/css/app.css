@@ -219,3 +219,10 @@ h4{margin:12px 0 4px;font-size:13px}
 .ictabs{display:flex;gap:6px;margin:0 0 8px;position:sticky;top:0;z-index:3;background:var(--card,#fff);padding:4px 0}.ictab{flex:1;border:1px solid var(--line);background:transparent;color:var(--tx);border-radius:10px;padding:8px 10px;font-weight:700;font-size:14px}.ictab.on{background:var(--g2,#0b5d3b);color:#fff;border-color:transparent}
 
 .perrow{flex-wrap:wrap}.yrpanel{flex:1 1 100%;flex-wrap:wrap;gap:6px;align-items:center;margin-top:4px}.yrchip{display:flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:14px;padding:4px 10px;font-size:13px}
+
+.clsbars{display:grid;gap:3px;align-items:stretch;margin:6px 0 4px;border-bottom:1px solid var(--line)}
+.clscol{display:flex;flex-direction:column-reverse;border-radius:3px 3px 0 0;overflow:hidden;background:#eef1ef}
+.clscol i{display:block;width:100%}
+.itab.cls td,.itab.cls th{font-size:10.5px;padding:3px 2px;text-align:center}
+.itab.cls td.lft{text-align:left;white-space:nowrap;font-weight:700}
+.clsdot{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px;border:1px solid rgba(0,0,0,.2)}

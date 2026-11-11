@@ -1,9 +1,22 @@
-import { S, afdKeyCol, afdRow, bump, buildDs, indexDs, autoKeyCol, computeStats, theme, loadLayer, putDataset, removeDataset, dsForTheme } from './model.js';
+import { S, afdKeyCol, afdRow, detectGroupCol, bump, buildDs, indexDs, autoKeyCol, computeStats, theme, loadLayer, putDataset, removeDataset, dsForTheme } from './model.js';
 import { parseCSV } from './geo.js';
 import { h, $, toast, pickFile, readText, select, uid, shareFile, shareFiles } from './util.js';
 import { openSheet, check, confirmBox, textInput } from './ui-common.js';
 
 // Impor satu berkas CSV sebagai dataset. Nama sama -> isi dataset lama diganti.
+// Excel sering punya 2 baris judul: baris angka (1..10) lalu nama bulan (Jan..Okt). Pakai baris nama bulan sebagai judul, dan isi kunci yang kosong dari baris di atasnya.
+const MONRE = /^(jan|feb|mar|apr|mei|may|jun|jul|agu|agt|aug|ags|sep|okt|oct|nov|des|dec)[a-z]*\.?$/i;
+function fixTwoRowHeader(ds) {
+  const r0 = ds.rows[0]; if (!r0) return;
+  const num = ds.headers.filter((h) => /^\d{1,2}$/.test(String(h).trim()));
+  if (num.length < 3 || !num.every((h) => MONRE.test(String(r0[h] || '').trim()))) return;
+  const map = {}; ds.headers = ds.headers.map((h) => { const nh = /^\d{1,2}$/.test(String(h).trim()) ? String(r0[h]).trim() : h; map[h] = nh; return nh; });
+  ds.rows = ds.rows.slice(1).map((r) => { const o = {}; for (const k of Object.keys(r)) o[map[k] || k] = r[k]; return o; });
+  ds.hmap = {}; ds.headers.forEach((h) => { ds.hmap[h.toLowerCase().trim()] = h; });
+  ds.keyCol = afdKeyCol(ds);
+  const kc = ds.keyCol; let last = '';
+  for (const r of ds.rows) { if (String(r[kc] || '').trim()) last = r[kc]; else r[kc] = last; }
+}
 // grafik WD bawaan: garis, target 200 mm
 function seedAfdCharts(ds) {
   if (!ds.headers.some((h) => /^wd\b/i.test(String(h).trim()))) return;
@@ -21,7 +34,7 @@ export async function importCSVFile(file, opts) {
   for (const l of S.layers) if (l.themed && l.visible) { try { await loadLayer(l); } catch (e) { /* abaikan */ } }
   const ds = buildDs(parsed, file.name, parsed.headers[0]);
   if (/^(afd|afdeling)\b/i.test(String(parsed.headers[0]).trim())) {
-    ds.level = 'afd'; ds.keyCol = afdKeyCol(ds); indexDs(ds); putDataset(ds); seedAfdCharts(ds);
+    ds.level = 'afd'; ds.keyCol = afdKeyCol(ds); fixTwoRowHeader(ds); ds.groupCol = detectGroupCol(ds); indexDs(ds); putDataset(ds); seedAfdCharts(ds);
     if (!opts.silent) { bump('data'); toast(`CSV tingkat afdeling dimuat: ${ds.rows.length} baris → tampil di tab "Afdeling" pada info lokasi`, 4800); }
     return ds;
   }
@@ -116,7 +129,7 @@ export function renderData() {
       h('div', { style: { flex: '1 1 100%', minWidth: 0 } },
         h('div', { class: 'nm', style: { wordBreak: 'break-all' } }, d.name),
         h('div', { class: 'mut small' }, `${d.level === 'afd' ? 'TINGKAT AFDELING · ' : ''}${d.rows.length} baris · ${d.headers.length} kolom` + (d.level === 'afd' ? afdInfo(d) : by.length ? ' · dipakai: ' + by.join(', ') : ' · belum dipakai tema'))),
-      h('button', { class: 'btn sec sm', onclick: () => { d.level = d.level === 'afd' ? '' : 'afd'; if (d.level === 'afd') { d.keyCol = afdKeyCol(d); indexDs(d); } else { d.keyCol = autoKeyCol(d); indexDs(d); } bump('data'); renderData(); } }, d.level === 'afd' ? 'Ubah ke CSV blok' : 'Ubah ke CSV afdeling'),
+      h('button', { class: 'btn sec sm', onclick: () => { d.level = d.level === 'afd' ? '' : 'afd'; if (d.level === 'afd') { d.keyCol = afdKeyCol(d); d.groupCol = detectGroupCol(d); indexDs(d); } else { d.keyCol = autoKeyCol(d); indexDs(d); } bump('data'); renderData(); } }, d.level === 'afd' ? 'Ubah ke CSV blok' : 'Ubah ke CSV afdeling'),
       h('button', { class: 'btn sec sm', onclick: () => previewSheet(d) }, 'Lihat'),
       h('button', { class: 'btn sec sm', onclick: () => shareSheet([d]) }, 'Bagikan'),
       h('button', { class: 'btn sec sm', onclick: () => {

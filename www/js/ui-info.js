@@ -125,12 +125,12 @@ export function buildAfdCard(layer, feat) {
   if (props.Estate) badges.append(h('span', { class: 'bdg' }, String(props.Estate)));
   badges.append(h('span', { class: 'bdg dark' }, 'Data afdeling'));
   hd.append(badges); card.append(hd);
-  if (!ac || !ac.row) {
+  if (!ac || !ac.hit) {
     card.append(h('div', { class: 'ic-none' }, `Afdeling "${afd}" tidak ditemukan di CSV afdeling (${ac ? ac.total : 0} file). Pastikan kolom Afd berisi nama yang sama dengan peta (mis. 4, Afd.4, atau AFD04 dianggap sama).`));
   } else {
     for (const tb of buildTables(th, ac.row, props, 'top', ac)) card.append(tb);
     for (const tb of buildTables(th, ac.row, props, 'rest', ac)) card.append(tb);
-    const ch = buildCharts(th, ac.row, ac.headers.filter((c) => c !== ac.keyCol));
+    const ch = buildCharts(th, ac.row, ac.headers.filter((c) => c !== ac.keyCol), ac);
     for (const el of ch.els) card.append(el);
     const rk = ch.rest.filter((c) => !HIDE_EMPTY(ac.row[c]));
     if (rk.length) {
