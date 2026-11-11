@@ -1,7 +1,7 @@
 // Grafik info lokasi: otomatis (bulanan & per-tahun) + pengaturan/kustom per tema (th.charts)
 import { S, getField, bump } from './model.js';
 import { h, num, uid, select, toast } from './util.js';
-import { compareTables, outlookValue, METRIC_OPT } from './ui-tables.js';
+import { compareTables, outlookValue, onTableView, METRIC_OPT } from './ui-tables.js';
 import { openSheet, confirmBox, textInput, numInput, colorInput, check, row as frow } from './ui-common.js';
 
 // angka CSV: "3,449" = 3449 (ribuan), "15,60" = 15.6 (desimal koma)
@@ -208,9 +208,9 @@ function colChart(labels, sets, cfg, kind, opt) {
     for (const x of sets) x.vals.forEach((v, i) => {
       if (v == null) return;
       svg.append(mk('circle', { cx: X(i), cy: YY(v) + 8, r: 2.6, fill: x.color }));
-      if (showLbl(x)) { const t = mk('text', { x: X(i), y: x === last || n === 1 ? YY(v) + 3 : YY(v) + 21, fill: x === last || n === 1 ? 'currentColor' : x.color, 'text-anchor': 'middle', 'font-size': 8 }); t.textContent = val(cfg, v); svg.append(t); }
+      if (showLbl(x)) { const t = mk('text', { x: X(i), y: x === last || n === 1 ? YY(v) + 3 : YY(v) + 21, fill: x === last || n === 1 ? 'currentColor' : x.color, 'text-anchor': i === 0 && N > 2 ? 'start' : i === N - 1 && N > 2 ? 'end' : 'middle', 'font-size': 8 }); t.textContent = val(cfg, v); svg.append(t); }
     });
-    labels.forEach((l, i) => { const t = mk('text', { x: X(i), y: H + 22, 'text-anchor': 'middle', 'font-size': 8.5, fill: '#7a8a82' }); t.textContent = l; svg.append(t); });
+    labels.forEach((l, i) => { const t = mk('text', { x: X(i), y: H + 22, 'text-anchor': i === 0 && N > 2 ? 'start' : i === N - 1 && N > 2 ? 'end' : 'middle', 'font-size': 8.5, fill: '#7a8a82' }); t.textContent = l; svg.append(t); });
     if (tg != null && isFinite(tg)) svg.append(mk('line', { x1: 0, x2: W, y1: YY(tg) + 8, y2: YY(tg) + 8, stroke: TCOL, 'stroke-width': 1.2, 'stroke-dasharray': '4 3' }));
     chart.className = 'mchart line'; chart.style.gridTemplateColumns = '1fr'; chart.style.height = 'auto';
     chart.innerHTML = ''; chart.append(svg);
@@ -313,7 +313,18 @@ export function buildCharts(th, row, headers) {
       else for (const yrs of [d.num, d.den]) if (yrs) for (const [, mm] of yrs) for (const c of Object.values(mm)) src.add(c);
     }
     let el = null; try { el = renderChart(e, row, th); } catch (err) { console.error(err); }
-    if (el) els.push(el);
+    if (el) {
+      els.push(el);
+      // batang Outlook ikut berubah saat periode (s/d) tabel diubah
+      if (e.cfg && e.cfg.olTable) {
+        const box = { el };
+        onTableView(e.cfg.olTable, () => {
+          if (!box.el.isConnected) return false;
+          const n = renderChart(e, row, th); if (!n) return true;
+          n.open = box.el.open; box.el.replaceWith(n); box.el = n; return true;
+        });
+      }
+    }
   }
   return { els, rest: rest.filter((c) => !src.has(c)) };
 }

@@ -181,6 +181,9 @@ function rangeColor(t, pct) {
 
 // ---- render ----
 const view = new Map();    // periode pilihan pengguna per tabel (sementara)
+const viewSubs = new Map(); // id tabel -> Set(fn) : grafik yang ikut berubah saat periode tabel diubah
+export function onTableView(id, fn) { if (!viewSubs.has(id)) viewSubs.set(id, new Set()); viewSubs.get(id).add(fn); }
+const notifyView = (id) => { const set = viewSubs.get(id); if (!set) return; for (const fn of [...set]) { let keep = true; try { keep = fn() !== false; } catch (e) { keep = false; } if (!keep) set.delete(fn); } };
 function head(t, labels) {
   const bg = t.color || '#0b5d3b', fg = contrast(bg);
   return h('thead', {}, h('tr', {}, labels.map((l) => h('th', { style: { background: bg, color: fg, whiteSpace: 'pre-line' } }, l))));
@@ -217,7 +220,8 @@ const autoToRow = (t, row) => { const R = { ton: series(row, t.right.ton), jjg: 
 // nilai Outlook satu baris metrik untuk satu blok (dipakai grafik)
 export function outlookValue(th, t, row, metric) {
   TH = th;
-  const from = t.from || 1, to = t.to == null || t.to === 'auto' ? autoToRow(t, row) : +t.to;
+  const vw = view.get(t.id) || {};
+  const from = vw.from || t.from || 1, toSel = vw.to != null ? vw.to : t.to, to = toSel == null || toSel === 'auto' ? autoToRow(t, row) : +toSel;
   const r = calcSides(t, row, from, to, true);
   return r.fl ? r.b[metric || 'tonha'] : null;
 }
@@ -246,7 +250,7 @@ function compareTable(t, row) {
   // pilih periode
   const mo = MLAB.map((m, i) => [i + 1, m]);
   const ds0 = CUR_DS;
-  const rerender = () => { const sv = CUR_DS; CUR_DS = ds0; let n; try { n = buildTable(t, row, null, true); } finally { CUR_DS = sv; } wrap.replaceWith(n); };
+  const rerender = () => { const sv = CUR_DS; CUR_DS = ds0; let n; try { n = buildTable(t, row, null, true); } finally { CUR_DS = sv; } wrap.replaceWith(n); notifyView(t.id); };
   const sel = h('div', { class: 'perrow' }, h('span', { class: 'mut small' }, 'Periode'),
     select(mo, from, (x) => { view.set(t.id, { ...(view.get(t.id) || {}), from: +x, to }); rerender(); }),
     h('span', { class: 'mut small' }, 's/d'),

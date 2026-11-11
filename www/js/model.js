@@ -159,6 +159,7 @@ export async function init() {
   }
   S.dsActive = (await dbGet('dsActive')) || (S.dsList[0] && S.dsList[0].id) || null;
   if (!S.dsList.some((d) => d.id === S.dsActive)) S.dsActive = S.dsList[0] ? S.dsList[0].id : null;
+  healLevels();
   for (const t of S.themes) { if (t.dsId === undefined) t.dsId = ''; if (t.opacity === undefined) t.opacity = 100; }
   S.ver++;
 }
@@ -182,6 +183,18 @@ export function putDataset(ds) {
   return ds;
 }
 // ---- CSV tingkat afdeling ----
+const AFD_HDR = /^(afd|afdeling)\b/i;
+// perbaiki penanda tingkat CSV yang salah (mis. CSV lama berisi afdeling yang dulu terbaca sebagai CSV blok, atau CSV blok besar yang salah ditandai afdeling)
+export function healLevels() {
+  let n = 0;
+  for (const d of S.dsList) {
+    const afdLike = AFD_HDR.test(String(d.headers[0] || '').trim());
+    if (d.level !== 'afd' && afdLike && d.rows.length <= 100) { d.level = 'afd'; d.keyCol = afdKeyCol(d); indexDs(d); n++; }
+    else if (d.level === 'afd' && !afdLike && !d.headers.some((x) => AFD_HDR.test(String(x).trim())) && d.rows.length > 100) { d.level = ''; d.keyCol = autoKeyCol(d); indexDs(d); n++; }
+  }
+  if (n) { const blk = S.dsList.filter((x) => x.level !== 'afd'); if (!blk.some((x) => x.id === S.dsActive)) S.dsActive = blk[0] ? blk[0].id : null; }
+  return n;
+}
 export const afdDatasets = () => S.dsList.filter((d) => d.level === 'afd');
 // samakan penulisan afdeling: "Afd.04", "AFD 4", "Afdeling 4" -> "4"; "KT 1.1" -> "kt1.1"
 export function afdKey(v) {

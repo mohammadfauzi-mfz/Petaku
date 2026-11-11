@@ -1,5 +1,5 @@
 // Sinkron data antar pengguna lewat repo GitHub (folder sync/) memakai GitHub Contents API
-import { S, saveNow, bump, emit, buildDs, putDataset, slimDs, loadLayer } from './model.js';
+import { S, saveNow, bump, emit, buildDs, putDataset, slimDs, loadLayer, healLevels } from './model.js';
 import { dbGet, dbSet, dbDel, bytesToBase64 } from './util.js';
 import { BUILD } from './version.js';
 
@@ -123,6 +123,7 @@ export async function pull(scope, progress) {
         if (i >= 0) { ds.id = S.dsList[i].id; S.dsList[i] = ds; } else S.dsList.push(ds);
       }
       if (j.active && S.dsList.some((d) => d.id === j.active)) S.dsActive = j.active;
+      healLevels();
       done.push(`${(j.datasets || []).length} CSV`);
     }
   }

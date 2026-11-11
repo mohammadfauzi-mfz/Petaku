@@ -48,9 +48,10 @@ function afdInfo(d) {
 }
 export async function importCSVFiles(files) {
   let last = null;
-  for (const f of files) last = await importCSVFile(f, { silent: files.length > 1 });
-  if (files.length > 1 && last) {
-    theme().dsId = last.id; bump('data');
+  for (const f of files) { const d = await importCSVFile(f, { silent: files.length > 1 }); if (d && d.level !== 'afd') last = d; }
+  if (files.length > 1) {
+    if (last) theme().dsId = last.id;
+    bump('data');
     toast(`${files.length} CSV dimuat. Pilih sumber CSV tiap tema di tab Tema.`, 4800);
   }
 }
@@ -111,11 +112,11 @@ export function renderData() {
   const list = h('div', { class: 'card' }, h('h3', {}, `Daftar CSV (${S.dsList.length})`));
   for (const d of S.dsList) {
     const by = usedBy(d);
-    const item = h('div', { class: 'themeItem' + (cur && cur.id === d.id ? ' active' : '') },
-      h('div', { style: { flex: 1, minWidth: 0 } },
+    const item = h('div', { class: 'themeItem' + (cur && cur.id === d.id ? ' active' : ''), style: { flexWrap: 'wrap' } },
+      h('div', { style: { flex: '1 1 100%', minWidth: 0 } },
         h('div', { class: 'nm', style: { wordBreak: 'break-all' } }, d.name),
         h('div', { class: 'mut small' }, `${d.level === 'afd' ? 'TINGKAT AFDELING · ' : ''}${d.rows.length} baris · ${d.headers.length} kolom` + (d.level === 'afd' ? afdInfo(d) : by.length ? ' · dipakai: ' + by.join(', ') : ' · belum dipakai tema'))),
-      h('button', { class: 'btn sec sm', onclick: () => { d.level = d.level === 'afd' ? '' : 'afd'; if (d.level === 'afd') { d.keyCol = afdKeyCol(d); indexDs(d); } else { d.keyCol = autoKeyCol(d); indexDs(d); } bump('data'); renderData(); } }, d.level === 'afd' ? 'Jadikan blok' : 'Jadikan afdeling'),
+      h('button', { class: 'btn sec sm', onclick: () => { d.level = d.level === 'afd' ? '' : 'afd'; if (d.level === 'afd') { d.keyCol = afdKeyCol(d); indexDs(d); } else { d.keyCol = autoKeyCol(d); indexDs(d); } bump('data'); renderData(); } }, d.level === 'afd' ? 'Ubah ke CSV blok' : 'Ubah ke CSV afdeling'),
       h('button', { class: 'btn sec sm', onclick: () => previewSheet(d) }, 'Lihat'),
       h('button', { class: 'btn sec sm', onclick: () => shareSheet([d]) }, 'Bagikan'),
       h('button', { class: 'btn sec sm', onclick: () => {

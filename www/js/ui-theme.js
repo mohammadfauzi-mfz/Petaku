@@ -51,7 +51,7 @@ function classEditor(t, c, i) {
 // pilih CSV sumber untuk syarat (kosong = CSV tema ini)
 function dsPick(q) {
   return h('div', { class: 'r2' }, h('span', { class: 'mut small', style: { flex: 'none', minWidth: 0 } }, 'CSV'),
-    select([['', 'CSV tema ini'], ...S.dsList.map((d) => [d.id, d.name])], q.dsId || '', (v) => { q.dsId = v; touch(); }));
+    select([['', 'CSV tema ini'], ...S.dsList.filter((d) => d.level !== 'afd').map((d) => [d.id, d.name])], q.dsId || '', (v) => { q.dsId = v; touch(); }));
 }
 // syarat tambahan: harus terpenuhi bersama syarat utama
 function andEditor(r, q, qi) {
@@ -61,7 +61,7 @@ function andEditor(r, q, qi) {
     select([['csv', 'Kolom CSV'], ['poly', 'Atribut poligon']], q.source || 'csv', (v) => { q.source = v; touch(); rerender(); }, { style: 'flex:0 0 120px' }),
     h('div', { style: { flex: 1 } }, textInput(q.field, (v) => { q.field = v; touch(); }, { placeholder: 'Nama kolom', list: q.source === 'poly' ? 'dl-poly' : 'dl-fields' })),
     h('button', { class: 'btn red sm', onclick: () => { r.and.splice(qi, 1); touch(); rerender(); } }, '✕')));
-  if (q.source !== 'poly' && S.dsList.length > 1) w.append(dsPick(q));
+  if (q.source !== 'poly' && S.dsList.filter((d) => d.level !== 'afd').length > 1) w.append(dsPick(q));
   w.append(h('div', { class: 'r2' },
     select(OPS, q.op || 'equals', (v) => { q.op = v; touch(); rerender(); }),
     (q.op === 'empty' || q.op === 'notempty') ? h('span', { class: 'mut' }, '(tanpa nilai)') : textInput(q.value, (v) => { q.value = v; touch(); }, { placeholder: 'Nilai / regex' })));
@@ -95,7 +95,7 @@ function templateSheet(rerender) {
     body.append(row('Template', select(TEMPLATES.map((x) => [x.key, x.name]), tk, (v) => { tk = v; draw(); })));
     body.append(h('div', { class: 'mut small' }, tp.desc));
     body.append(row('Nama peta', textInput(nm, (v) => { nm = v; }, { placeholder: 'mis. Pemupukan 2026' })));
-    const dsel = S.dsList.length ? select([['', 'CSV aktif'], ...S.dsList.map((d) => [d.id, d.name])], dsId, (v) => { dsId = v; draw(); }) : null;
+    const dsel = S.dsList.length ? select([['', 'CSV aktif'], ...S.dsList.filter((d) => d.level !== 'afd').map((d) => [d.id, d.name])], dsId, (v) => { dsId = v; draw(); }) : null;
     if (dsel) body.append(row('CSV', dsel));
     const ds = S.dsList.find((d) => d.id === dsId) || S.ds;
     const hdrs = ds ? ds.headers : [];
@@ -140,7 +140,7 @@ function ruleEditor(t, r, i) {
     select(OPS, r.op, (v) => { r.op = v; touch(); rerender(); }),
     (r.op === 'empty' || r.op === 'notempty') ? h('span', { class: 'mut' }, '(tanpa nilai)') : textInput(r.value, (v) => { r.value = v; touch(); }, { placeholder: 'Nilai / regex' }));
   wrap.append(r2);
-  if (r.source !== 'poly' && S.dsList.length > 1) wrap.append(dsPick(r));
+  if (r.source !== 'poly' && S.dsList.filter((d) => d.level !== 'afd').length > 1) wrap.append(dsPick(r));
   for (const [qi, q] of (r.and || []).entries()) wrap.append(andEditor(r, q, qi));
   wrap.append(h('div', { class: 'r2' }, h('button', { class: 'btn sec sm', onclick: () => { (r.and = r.and || []).push({ source: 'csv', dsId: '', field: '', op: 'equals', value: '' }); touch(); rerender(); } }, '+ Syarat tambahan (DAN)')));
   wrap.append(h('div', { class: 'r2' }, h('span', { class: 'mut small', style: { flex: 'none', minWidth: 0 } }, 'Cara'),
@@ -233,7 +233,7 @@ export function renderTheme() {
     row('Nama tema', textInput(t.name, (v) => { t.name = v; touch(); emit('themes'); }, {})),
     row('Judul peta', textArea(t.title, (v) => { t.title = v; touch(); }, { rows: 2, placeholder: 'Baris 1\nBaris 2 (mis. periode)' })),
     row('Judul legenda', textInput(t.legendTitle, (v) => { t.legendTitle = v; touch(); })),
-    row('Sumber CSV', select([['', '(otomatis: CSV aktif)'], ...S.dsList.map((d) => [d.id, d.name])], t.dsId || '', (v) => { t.dsId = v; touch(); rerender(); })),
+    row('Sumber CSV', select([['', '(otomatis: CSV aktif)'], ...S.dsList.filter((d) => d.level !== 'afd').map((d) => [d.id, d.name])], t.dsId || '', (v) => { t.dsId = v; touch(); rerender(); })),
     S.dsList.length ? null : h('div', { class: 'mut small' }, 'Belum ada CSV — impor di tab Data.'),
     row('Cara warna', select([['range', 'Rentang angka'], ['category', 'Kategori teks']], t.mode, (v) => { t.mode = v; touch(); rerender(); })),
     row('Kolom data', textInput(t.field, (v) => { t.field = v; touch(); }, { list: 'dl-fields', placeholder: 'Nama kolom CSV' })),
