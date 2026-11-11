@@ -17,11 +17,36 @@ export const S = {
   rt: new Map(),     // runtime layer: id -> {feats}
 };
 
-// dataset yang dipakai tema aktif (tema.dsId, kalau kosong: dataset aktif)
+// dataset yang dipakai tema aktif: tema.dsId (satu CSV tertentu); kalau kosong = SEMUA CSV blok digabung per kode blok
+const mergedCache = new Map();
+function mergeDs(list) {
+  const sig = list.map((d) => d.id + ':' + d.rows.length + ':' + (d.updatedAt || '')).join('|');
+  const hit = mergedCache.get(sig); if (hit) return hit;
+  const first = list[0], kc = first.keyCol;
+  const headers = [], seenH = new Set();
+  for (const d of list) for (const h of d.headers) if (!seenH.has(h)) { seenH.add(h); headers.push(h); }
+  const rows = [], idx = new Map();
+  for (const d of list) {
+    for (const r of d.rows) {
+      const k = normKey(r[d.keyCol]); if (!k) continue;
+      const ex = idx.get(k);
+      if (!ex) { const n = { ...r }; n[kc] = r[d.keyCol]; idx.set(k, n); rows.push(n); }
+      else for (const h of d.headers) if (h !== d.keyCol && (ex[h] === undefined || ex[h] === '')) ex[h] = r[h];
+    }
+  }
+  const m = buildDs({ headers, rows, delimiter: first.delimiter }, list.map((d) => d.name).join(' + '), kc, 'm:' + sig);
+  m.parts = list.map((d) => d.id); m.merged = true;
+  mergedCache.clear(); mergedCache.set(sig, m);
+  return m;
+}
 export function dsForTheme(t) {
   const blk = S.dsList.filter((x) => x.level !== 'afd');   // CSV tingkat afdeling tidak dipakai mewarnai blok
   if (t && t.dsId) { const d = blk.find((x) => x.id === t.dsId); if (d) return d; }
-  return blk.find((x) => x.id === S.dsActive) || blk[0] || null;
+  if (blk.length > 1) {
+    const act = blk.find((x) => x.id === S.dsActive) || blk[0];
+    return mergeDs([act, ...blk.filter((x) => x !== act)]);
+  }
+  return blk[0] || null;
 }
 Object.defineProperty(S, 'ds', { get() { return dsForTheme(S.themes.find((t) => t.id === S.themeId) || S.themes[0]); }, enumerable: false });
 
@@ -165,6 +190,11 @@ export async function init() {
   if (!S.dsList.some((d) => d.id === S.dsActive)) S.dsActive = S.dsList[0] ? S.dsList[0].id : null;
   healLevels();
   for (const t of S.themes) { if (t.dsId === undefined) t.dsId = ''; if (t.opacity === undefined) t.opacity = 100; }
+  if (!S.cfg.mergeMig) {
+    S.cfg.mergeMig = 1;
+    const blk = S.dsList.filter((x) => x.level !== 'afd'), big = Math.max(0, ...blk.map((x) => x.rows.length));
+    if (blk.length > 1) for (const t of S.themes) { const d = blk.find((x) => x.id === t.dsId); if (d && d.rows.length < big * 0.5) t.dsId = ''; }
+  }
   wireAll();
   S.ver++;
 }

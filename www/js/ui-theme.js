@@ -233,7 +233,7 @@ export function renderTheme() {
     row('Nama tema', textInput(t.name, (v) => { t.name = v; touch(); emit('themes'); }, {})),
     row('Judul peta', textArea(t.title, (v) => { t.title = v; touch(); }, { rows: 2, placeholder: 'Baris 1\nBaris 2 (mis. periode)' })),
     row('Judul legenda', textInput(t.legendTitle, (v) => { t.legendTitle = v; touch(); })),
-    row('Sumber CSV', select([['', '(otomatis: CSV aktif)'], ...S.dsList.filter((d) => d.level !== 'afd').map((d) => [d.id, d.name])], t.dsId || '', (v) => { t.dsId = v; touch(); rerender(); })),
+    row('Sumber CSV', select([['', '(otomatis: semua CSV blok digabung)'], ...S.dsList.filter((d) => d.level !== 'afd').map((d) => [d.id, d.name])], t.dsId || '', (v) => { t.dsId = v; touch(); rerender(); })),
     S.dsList.length ? null : h('div', { class: 'mut small' }, 'Belum ada CSV — impor di tab Data.'),
     row('Cara warna', select([['range', 'Rentang angka'], ['category', 'Kategori teks']], t.mode, (v) => { t.mode = v; touch(); rerender(); })),
     row('Kolom data', textInput(t.field, (v) => { t.field = v; touch(); }, { list: 'dl-fields', placeholder: 'Nama kolom CSV' })),

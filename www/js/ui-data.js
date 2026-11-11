@@ -43,7 +43,8 @@ export async function importCSVFile(file, opts) {
   putDataset(ds);
   const th = theme();
   if (!opts.silent) {
-    th.dsId = ds.id;           // tema yang sedang dibuka langsung memakai CSV ini
+    if (th.dsId && S.dsList.filter((d) => d.level !== 'afd').length > 1) th.dsId = '';   // beberapa CSV blok -> digabung otomatis
+    else th.dsId = th.dsId ? ds.id : th.dsId;
     bump('data');
     const hasField = ds.hmap[String(th.field || '').toLowerCase().trim()] !== undefined;
     toast(hasField ? `CSV dimuat: ${ds.rows.length} baris → dipakai tema "${th.name}"` : `CSV dimuat (${ds.rows.length} baris), tetapi kolom "${th.field}" tidak ada → pilih kolom di tab Tema`, 4800);
@@ -63,7 +64,6 @@ export async function importCSVFiles(files) {
   let last = null;
   for (const f of files) { const d = await importCSVFile(f, { silent: files.length > 1 }); if (d && d.level !== 'afd') last = d; }
   if (files.length > 1) {
-    if (last) theme().dsId = last.id;
     bump('data');
     toast(`${files.length} CSV dimuat. Pilih sumber CSV tiap tema di tab Tema.`, 4800);
   }
@@ -108,7 +108,7 @@ function shareSheet(list) {
 }
 
 function usedBy(ds) {
-  return S.themes.filter((t) => (dsForTheme(t) || {}).id === ds.id).map((t) => t.name);
+  return S.themes.filter((t) => { const x = dsForTheme(t) || {}; return x.id === ds.id || (x.parts || []).includes(ds.id); }).map((t) => t.name);
 }
 
 export function renderData() {
@@ -121,7 +121,7 @@ export function renderData() {
   el.append(card);
   if (!S.dsList.length) { el.append(h('div', { class: 'hint' }, 'Belum ada CSV. Peta tetap tampil, blok diwarnai setelah CSV diimpor.')); return; }
 
-  const cur = S.ds;
+  const cur = S.ds && S.ds.merged ? (S.dsList.find((d) => d.id === S.ds.parts[0]) || S.ds) : S.ds;
   const list = h('div', { class: 'card' }, h('h3', {}, `Daftar CSV (${S.dsList.length})`));
   for (const d of S.dsList) {
     const by = usedBy(d);
