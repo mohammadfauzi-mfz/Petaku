@@ -68,7 +68,7 @@ function gpsCenter(first) {
   const [wx, wy] = toWorld(gps.pos.lon, gps.pos.lat);
   view.cx = wx; view.cy = wy;
   const want = view.w / (700 / M_PER_UNIT);      // lebar layar ~700 m
-  if (first || view.scale < want * 0.25) view.scale = Math.max(view.scale, want);
+  if (first || view.scale < want * 0.25) view.scale = Math.max(view.scale, want);   // terlalu jauh -> dekatkan; selain itu zoom dibiarkan
   requestDraw();
 }
 function gpsStop() {
@@ -301,7 +301,17 @@ export function initMap() {
   $('#bFilter').onclick = () => openFilter();
   window.addEventListener('petaku-ui', () => requestDraw());
   $('#bSum').onclick = () => openSummary();
-  $('#bGps').onclick = () => { if (!gps.on) gpsStart(); else gpsSheet(); };
+  // tombol lokasi: tiap ketuk = cari koordinat lokasi saya dan taruh di tengah peta (tanpa panel info). Tekan lama = matikan titik lokasi.
+  let lp = null, longDone = false;
+  const bG = $('#bGps');
+  bG.addEventListener('pointerdown', () => { longDone = false; lp = setTimeout(() => { longDone = true; if (gps.on) { gpsStop(); toast('Titik lokasi dimatikan', 1800); } }, 700); });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) bG.addEventListener(ev, () => { clearTimeout(lp); });
+  bG.onclick = () => {
+    if (longDone) { longDone = false; return; }
+    if (!gps.on) { gpsStart(); return; }
+    if (!gps.pos) { toast('Menunggu sinyal GPS…', 1800); return; }
+    gpsCenter(false);
+  };
   const lb = $('#bLbl');
   const syncLbl = () => lb.classList.toggle('on', theme().label.show !== false);
   lb.onclick = () => { const t = theme(); t.label.show = t.label.show === false; syncLbl(); bump('style'); };
