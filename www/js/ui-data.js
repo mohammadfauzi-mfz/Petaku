@@ -1,3 +1,4 @@
+import { isAdmin } from './auth.js';
 import { S, afdKeyCol, afdRow, detectGroupCol, bump, buildDs, indexDs, autoKeyCol, computeStats, theme, loadLayer, putDataset, removeDataset, dsForTheme } from './model.js';
 import { parseCSV } from './geo.js';
 import { h, $, toast, pickFile, readText, select, uid, shareFile, shareFiles } from './util.js';
@@ -133,7 +134,7 @@ export function renderData() {
         h('div', { class: 'mut small' }, `${d.level === 'afd' ? 'TINGKAT AFDELING · ' : ''}${d.rows.length} baris · ${d.headers.length} kolom` + (d.level === 'afd' ? afdInfo(d) : by.length ? ' · dipakai: ' + by.join(', ') : ' · belum dipakai tema'))),
       h('button', { class: 'btn sec sm', onclick: () => { d.level = d.level === 'afd' ? '' : 'afd'; if (d.level === 'afd') { d.keyCol = afdKeyCol(d); d.groupCol = detectGroupCol(d); indexDs(d); } else { d.keyCol = autoKeyCol(d); indexDs(d); } bump('data'); renderData(); } }, d.level === 'afd' ? 'Ubah ke CSV blok' : 'Ubah ke CSV afdeling'),
       h('button', { class: 'btn sec sm', onclick: () => previewSheet(d) }, 'Lihat'),
-      h('button', { class: 'btn sec sm', onclick: () => shareSheet([d]) }, 'Bagikan'),
+      isAdmin() ? h('button', { class: 'btn sec sm', onclick: () => shareSheet([d]) }, 'Bagikan') : null,
       h('button', { class: 'btn sec sm', onclick: () => {
         const inp = textInput(d.name, () => {});
         const close = openSheet('Ganti nama CSV', h('div', {}, inp, h('div', { class: 'btns' }, h('button', { class: 'btn', onclick: () => { const v = inp.value.trim(); if (v) { d.name = v; bump('data'); renderData(); } close(); } }, 'Simpan'))), { center: true });
@@ -141,7 +142,7 @@ export function renderData() {
       h('button', { class: 'btn red sm', onclick: async () => { if (!await confirmBox(`Hapus CSV "${d.name}"?`, 'Hapus')) return; removeDataset(d.id); bump('data'); renderData(); } }, 'Hapus'));
     list.append(item);
   }
-  if (S.dsList.length > 1) list.append(h('div', { class: 'btns' }, h('button', { class: 'btn sec sm', onclick: () => shareSheet(S.dsList.slice()) }, 'Bagikan semua')));
+  if (isAdmin() && S.dsList.length > 1) list.append(h('div', { class: 'btns' }, h('button', { class: 'btn sec sm', onclick: () => shareSheet(S.dsList.slice()) }, 'Bagikan semua')));
   list.append(h('div', { class: 'mut small' }, 'Disorot = CSV yang dipakai tema aktif (“' + theme().name + '”).'));
   el.append(list);
 
