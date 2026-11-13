@@ -3,6 +3,7 @@
 import { h, $, toast, select, dbGet, dbSet, dbDel, bytesToBase64, base64ToBytes } from './util.js';
 import { openSheet, confirmBox, textInput, row } from './ui-common.js';
 import { remoteText, pushText } from './sync.js';
+import { fbOn, fbRestore, fbSignIn, fbSignOut, fbRefresh, fbLoadRole, fbSession } from './firebase.js';
 
 const ITER = 150000;
 const te = new TextEncoder();
@@ -45,11 +46,17 @@ async function refreshRemote() {
   } catch (e) { return 'error'; }
 }
 
-export async function logout() { await dbDel('auth:session'); location.reload(); }
+export async function logout() { await dbDel('auth:session'); if (fbOn()) await fbSignOut(); location.reload(); }
 
 // dipanggil setelah aplikasi berjalan: pastikan akun masih berlaku
 export async function backgroundCheck() {
   if (!me) return;
+  if (fbOn()) {
+    const r = await fbRefresh(true);
+    if (r === 'revoked') { toast('Sesi berakhir atau akun dinonaktifkan. Silakan masuk lagi.', 5000); setTimeout(logout, 1800); return; }
+    if (r === 'ok') { try { await fbLoadRole(); const s = fbSession(); me = { u: s.email, name: s.name || s.email, role: s.role }; } catch (e) { /* abaikan */ } }
+    return;
+  }
   if ((await refreshRemote()) !== 'ok') return;
   const u = DB.users.find((x) => x.u === me.u);
   const ses = await dbGet('auth:session');
@@ -59,6 +66,11 @@ export async function backgroundCheck() {
 
 // ---- layar login ----
 export async function requireLogin() {
+  if (fbOn()) {
+    const s = await fbRestore();
+    if (s) { me = { u: s.email, name: s.name || s.email, role: s.role || 'user' }; return; }
+    await fbLoginScreen(); return;
+  }
   DB = (await dbGet('auth:users')) || DB;
   const ses = await dbGet('auth:session');
   if (ses) {
@@ -66,6 +78,33 @@ export async function requireLogin() {
     if (u && fp(u) === ses.fp) { me = pub(u); return; }
   }
   await loginScreen();
+}
+
+function fbLoginScreen() {
+  return new Promise((resolve) => {
+    const wrap = h('div', { id: 'loginWrap' }); document.body.append(wrap);
+    let msg = '', busy = false;
+    const draw = () => {
+      wrap.innerHTML = '';
+      const box = h('div', { class: 'loginbox' });
+      box.append(h('div', { class: 'logo' }, '🗺'), h('h2', {}, 'Petaku'));
+      const em = textInput('', () => {}, { placeholder: 'Email', autocapitalize: 'none', autocomplete: 'username', type: 'email' });
+      const pw = h('input', { type: 'password', placeholder: 'Password', autocomplete: 'current-password' });
+      const err = h('div', { class: 'loginmsg' }, msg);
+      const btn = h('button', { class: 'btn block' }, 'Masuk');
+      const go = async () => {
+        if (busy) return;
+        if (!em.value.trim() || !pw.value) { msg = 'Isi email dan password'; return draw(); }
+        busy = true; btn.disabled = true; btn.textContent = 'Memeriksa…';
+        try { const s = await fbSignIn(em.value, pw.value); me = { u: s.email, name: s.name || s.email, role: s.role }; wrap.remove(); resolve(); }
+        catch (e) { busy = false; msg = e.message || 'Gagal masuk'; draw(); }
+      };
+      btn.onclick = go; pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+      box.append(em, pw, err, btn, h('div', { class: 'mut small', style: { marginTop: '8px' } }, 'Akun dibuat oleh Admin. Login pertama di HP ini butuh internet.'));
+      wrap.append(box); setTimeout(() => em.focus(), 50);
+    };
+    draw();
+  });
 }
 
 function loginScreen() {
@@ -151,6 +190,7 @@ async function touchDB() { DB.updatedAt = Date.now(); DB.dirty = true; await sav
 
 export function openAccounts() {
   if (!isAdmin()) { toast('Hanya Admin'); return; }
+  if (fbOn()) { toast('Akun dikelola di Firebase Console → Authentication', 4500); return; }
   const body = h('div', {});
   let close;
   const adminCount = () => DB.users.filter((x) => x.role === 'admin').length;
@@ -219,7 +259,7 @@ export function accountCard() {
   if (!me) return c;
   c.append(h('div', {}, h('b', {}, me.name || me.u), ` · ${roleLabel(me.role)} (${me.u})`));
   const bt = h('div', { class: 'btns' });
-  if (isAdmin()) bt.append(h('button', { class: 'btn sec', onclick: openAccounts }, 'Kelola akun'));
+  if (isAdmin() && !fbOn()) bt.append(h('button', { class: 'btn sec', onclick: openAccounts }, 'Kelola akun'));
   bt.append(h('button', { class: 'btn red', onclick: async () => { if (await confirmBox('Keluar dari akun ini?', 'Keluar')) logout(); } }, 'Keluar'));
   c.append(bt);
   return c;

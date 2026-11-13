@@ -122,9 +122,12 @@ export function renderData() {
   el.append(card);
   if (!S.dsList.length) { el.append(h('div', { class: 'hint' }, 'Belum ada CSV. Peta tetap tampil, blok diwarnai setelah CSV diimpor.')); return; }
 
-  const cur = S.ds && S.ds.merged ? (S.dsList.find((d) => d.id === S.ds.parts[0]) || S.ds) : S.ds;
-  const list = h('div', { class: 'card' }, h('h3', {}, `Daftar CSV (${S.dsList.length})`));
-  for (const d of S.dsList) {
+  const cur0 = S.ds && S.ds.merged ? (S.dsList.find((d) => d.id === S.ds.parts[0]) || S.ds) : S.ds;
+  const hide = (x) => !isAdmin() && x && x.src === 'srv';          // data unduhan dari server tidak tampil untuk pengguna biasa
+  const cur = hide(cur0) ? null : cur0;
+  const shown = S.dsList.filter((x) => !hide(x));
+  const list = h('div', { class: 'card' }, h('h3', {}, `Daftar CSV (${shown.length})`));
+  for (const d of shown) {
     const by = usedBy(d);
     const item = h('div', { class: 'themeItem' + (cur && cur.id === d.id ? ' active' : ''), style: { flexWrap: 'wrap' } },
       h('div', { style: { flex: '1 1 100%', minWidth: 0 } },
@@ -142,7 +145,7 @@ export function renderData() {
       h('button', { class: 'btn red sm', onclick: async () => { if (!await confirmBox(`Hapus CSV "${d.name}"?`, 'Hapus')) return; removeDataset(d.id); bump('data'); renderData(); } }, 'Hapus'));
     list.append(item);
   }
-  if (isAdmin() && S.dsList.length > 1) list.append(h('div', { class: 'btns' }, h('button', { class: 'btn sec sm', onclick: () => shareSheet(S.dsList.slice()) }, 'Bagikan semua')));
+  if (isAdmin() && shown.length > 1) list.append(h('div', { class: 'btns' }, h('button', { class: 'btn sec sm', onclick: () => shareSheet(S.dsList.slice()) }, 'Bagikan semua')));
   list.append(h('div', { class: 'mut small' }, 'Disorot = CSV yang dipakai tema aktif (“' + theme().name + '”).'));
   el.append(list);
 

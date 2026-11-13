@@ -44,8 +44,8 @@ export function dsForTheme(t) {
   if (t && t.dsId) { const d = all.find((x) => x.id === t.dsId); if (d) return d; }   // pilihan eksplisit tetap dipakai walau saklarnya mati
   const blk = all.filter((x) => !x.off);
   if (blk.length > 1) {
-    const act = blk.find((x) => x.id === S.dsActive) || blk[0];
-    return mergeDs([act, ...blk.filter((x) => x !== act)]);
+    // data dari server didahulukan (menang bila bentrok), lalu data buatan pengguna
+    return mergeDs([...blk.filter((x) => x.src === 'srv'), ...blk.filter((x) => x.src !== 'srv')]);
   }
   return blk[0] || null;
 }
@@ -149,7 +149,7 @@ export function defCfg() {
 // ---------------- persistensi ----------------
 let saveT;
 export function saveSoon() { clearTimeout(saveT); saveT = setTimeout(saveNow, 400); }
-export const slimDs = (d) => ({ id: d.id, name: d.name, headers: d.headers, rows: d.rows, keyCol: d.keyCol, delimiter: d.delimiter, level: d.level || '', groupCol: d.groupCol || '', off: !!d.off, updatedAt: d.updatedAt || 0 });
+export const slimDs = (d) => ({ id: d.id, name: d.name, headers: d.headers, rows: d.rows, keyCol: d.keyCol, delimiter: d.delimiter, level: d.level || '', groupCol: d.groupCol || '', off: !!d.off, src: d.src || '', updatedAt: d.updatedAt || 0 });
 export const defSync = () => ({ repo: 'mohammadfauzi-mfz/Petaku', branch: 'main', folder: 'sync', token: '', lastManifest: '', lastPull: 0, scope: { data: true, themes: true, layers: true, cfg: false }, lastUpdateCheck: 0 });
 export async function saveNow() {
   try {
@@ -182,7 +182,7 @@ export async function init() {
   S.sync = { ...defSync(), ...((await dbGet('sync')) || {}) };
   S.sync.scope = { ...defSync().scope, ...(S.sync.scope || {}) };
   const L2 = await dbGet('dsList');
-  if (Array.isArray(L2)) S.dsList = L2.filter((d) => d && d.rows).map((d) => { const x = buildDs(d, d.name, d.keyCol, d.id, d.updatedAt); x.level = d.level || ''; x.groupCol = d.groupCol || ''; x.off = !!d.off; return x; });
+  if (Array.isArray(L2)) S.dsList = L2.filter((d) => d && d.rows).map((d) => { const x = buildDs(d, d.name, d.keyCol, d.id, d.updatedAt); x.level = d.level || ''; x.groupCol = d.groupCol || ''; x.off = !!d.off; x.src = d.src || ''; return x; });
   else {
     const old = await dbGet('ds');   // migrasi dari versi 1 CSV
     if (old && old.rows) S.dsList = [buildDs(old, old.name, old.keyCol)];
@@ -243,7 +243,7 @@ export function buildDs(parsed, name, keyCol, id, updatedAt) {
 }
 // tambah dataset; bila nama sama sudah ada -> isinya diganti (id tetap)
 export function putDataset(ds) {
-  const i = S.dsList.findIndex((d) => d.name.toLowerCase() === ds.name.toLowerCase());
+  const i = S.dsList.findIndex((d) => d.name.toLowerCase() === ds.name.toLowerCase() && (d.src === 'srv') === (ds.src === 'srv'));   // CSV pengguna tidak menimpa CSV dari server
   if (i >= 0) { ds.id = S.dsList[i].id; S.dsList[i] = ds; } else S.dsList.push(ds);
   if (ds.level !== 'afd') S.dsActive = ds.id;
   return ds;

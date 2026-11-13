@@ -13,7 +13,9 @@ import { checkRemote } from './sync.js';
 import { checkUpdate, BUILD } from './update.js';
 import { petaku } from './native.js';
 import { base64ToBytes, applyUiMode } from './util.js';
-import { requireLogin, backgroundCheck } from './auth.js';
+import { requireLogin, backgroundCheck, isAdmin } from './auth.js';
+import { fbOn } from './firebase.js';
+import { pull } from './sync.js';
 import { PRESETS } from './ui-tables.js';
 applyUiMode();
 try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyUiMode); } catch (e) { /* abaikan */ }
@@ -63,11 +65,13 @@ async function takeIncoming() {
 
 async function startupChecks() {
   const c = S.sync;
-  if (!c || !/^[\w.-]+\/[\w.-]+$/.test(c.repo || '')) return;
-  try {
-    const r = await checkRemote();
-    if (r.manifest && r.newer) toast('Ada data baru di GitHub → Pengaturan (⚙) → Tarik data terbaru', 6000);
-  } catch (e) { /* offline / tidak ada akses: diam saja */ }
+  if (!fbOn() && c && /^[\w.-]+\/[\w.-]+$/.test(c.repo || '')) {
+    try {
+      const r = await checkRemote();
+      if (r.manifest && r.newer) toast('Ada data baru di GitHub → Pengaturan (⚙) → Tarik data terbaru', 6000);
+    } catch (e) { /* offline / tidak ada akses: diam saja */ }
+  }
+  if (!c) return;
   if (Date.now() - (c.lastUpdateCheck || 0) > 12 * 3600 * 1000 && BUILD > 0) {
     try {
       const u = await checkUpdate();
@@ -116,6 +120,14 @@ async function boot() {
   }
   setTimeout(startupChecks, 2500);
   setTimeout(backgroundCheck, 4000);
+  // Firebase: pengguna biasa otomatis menarik data terbaru bila ada internet (Admin tidak, agar datanya tidak tertimpa)
+  if (fbOn() && !isAdmin()) setTimeout(async () => {
+    if (!navigator.onLine) return;
+    try {
+      const r = await checkRemote();
+      if (r.newer) { const res = await pull({ data: true, themes: true, layers: true, cfg: true }); fillThemeSel(); toast('Data terbaru diunduh: ' + res.done.join(', '), 4000); }
+    } catch (e) { console.warn('auto-tarik gagal', e); }
+  }, 6000);
   window.__app = { S, showPage, handleIncoming };
 }
 boot().catch((e) => { console.error(e); $('#loading').textContent = 'Gagal memulai: ' + e.message; });

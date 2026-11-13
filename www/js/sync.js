@@ -2,6 +2,7 @@
 import { S, wireAll, saveNow, bump, emit, buildDs, putDataset, slimDs, loadLayer, healLevels } from './model.js';
 import { dbGet, dbSet, dbDel, bytesToBase64 } from './util.js';
 import { BUILD } from './version.js';
+import { fbOn, fbGetText, fbPutText } from './firebase.js';
 
 const API = 'https://api.github.com';
 const enc = (p) => p.split('/').map(encodeURIComponent).join('/');
@@ -24,6 +25,7 @@ async function fail(r, what) {
 function repoPath(p) { return `${API}/repos/${cfg().repo}/contents/${enc(cfg().folder + '/' + p)}`; }
 
 async function getText(p) {
+  if (fbOn()) return fbGetText(p);
   const r = await fetch(`${repoPath(p)}?ref=${encodeURIComponent(cfg().branch)}&_=${Date.now()}`, { headers: headers(true), cache: 'no-store' });
   if (r.status === 404) return null;
   if (!r.ok) await fail(r, p);
@@ -37,6 +39,7 @@ async function getSha(p) {
   return j && j.sha ? j.sha : null;
 }
 async function putText(p, text, message) {
+  if (fbOn()) return fbPutText(p, text);
   const content = bytesToBase64(new TextEncoder().encode(text));
   for (let attempt = 0; attempt < 2; attempt++) {
     const sha = await getSha(p);
@@ -50,6 +53,7 @@ async function putText(p, text, message) {
 }
 
 export function checkConfig(needToken) {
+  if (fbOn()) return;
   const c = cfg();
   if (!/^[\w.-]+\/[\w.-]+$/.test(c.repo || '')) throw new Error('Isi nama repo dengan format pemilik/nama, mis. mohammadfauzi-mfz/Petaku');
   if (needToken && !c.token) throw new Error('Mengirim data butuh token GitHub (lihat petunjuk di Pengaturan).');
@@ -115,12 +119,15 @@ export async function pull(scope, progress) {
     const t = await getText('datasets.json');
     if (t) {
       const j = JSON.parse(t);
+      const incoming = new Set((j.datasets || []).map((d) => d.name.toLowerCase()));
+      S.dsList = S.dsList.filter((x) => x.src !== 'srv' || incoming.has(x.name.toLowerCase()));   // data unduhan lama yang sudah tidak ada di server -> hilang
       for (const d of j.datasets || []) {
         const rows = d.rows.map((a) => { const o = {}; d.headers.forEach((h, k) => { o[h] = a[k] == null ? '' : a[k]; }); return o; });
         const ds = buildDs({ headers: d.headers, rows, delimiter: d.delimiter }, d.name, d.keyCol, d.id, d.updatedAt);
         ds.level = d.level || ''; ds.groupCol = d.groupCol || ''; ds.off = !!d.off;
-        const i = S.dsList.findIndex((x) => x.id === ds.id || x.name.toLowerCase() === ds.name.toLowerCase());
-        if (i >= 0) { ds.id = S.dsList[i].id; S.dsList[i] = ds; } else S.dsList.push(ds);
+        ds.src = 'srv';
+        const i = S.dsList.findIndex((x) => x.src === 'srv' && x.name.toLowerCase() === ds.name.toLowerCase());
+        if (i >= 0) { ds.id = S.dsList[i].id; S.dsList[i] = ds; } else { if (S.dsList.some((x) => x.id === ds.id)) ds.id = 'srv' + ds.id + Date.now().toString(36); S.dsList.push(ds); }
       }
       if (j.active && S.dsList.some((d) => d.id === j.active)) S.dsActive = j.active;
       healLevels();
