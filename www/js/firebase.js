@@ -141,3 +141,31 @@ export async function fbRemoveMember(email) {
 export async function fbResetPassword(email) {
   await post(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${KEY()}`, { requestType: 'PASSWORD_RESET', email: String(email).trim().toLowerCase() });
 }
+
+// ---- bersihkan sisa data lama di server (potongan basi + berkas layer yang sudah dihapus) ----
+async function rawDel(id) {
+  const r = await fetch(`${DOCS()}/${FB.collection}/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + await token() } });
+  if (!r.ok && r.status !== 404) throw new Error('Firestore ' + r.status);
+}
+// layerFiles: nama berkas layer yang MASIH dipakai (null = jangan sentuh berkas layer)
+export async function fbCleanup(layerFiles) {
+  const ids = []; let page = '';
+  for (let k = 0; k < 50; k++) {
+    const d = await rawGet(`${FB.collection}?pageSize=300${page}`); if (!d) break;
+    for (const x of d.documents || []) ids.push(x.name.split('/').pop());
+    if (!d.nextPageToken) break; page = '&pageToken=' + encodeURIComponent(d.nextPageToken);
+  }
+  const mains = new Map(), chunks = [];
+  for (const id of ids) { const m = id.match(/^(.*)~c(\d+)$/); if (m) chunks.push([id, m[1], +m[2]]); else mains.set(id, null); }
+  for (const [id] of mains) { const d = await rawGet(`${FB.collection}/${encodeURIComponent(id)}`).catch(() => null); mains.set(id, d && d.fields && d.fields.n ? +d.fields.n.integerValue : 0); }
+  const keepLayers = layerFiles ? new Set(layerFiles.map((p) => p.replace(/\//g, '~'))) : null;
+  let removed = 0;
+  for (const id of mains.keys()) {
+    if (keepLayers && id.startsWith('layer-') && !keepLayers.has(id)) { for (const [cid, base] of chunks) if (base === id) { await rawDel(cid); removed++; } await rawDel(id); removed++; mains.delete(id); }
+  }
+  for (const [cid, base, i] of chunks) {
+    if (cid.length && !mains.has(base)) { if (base.startsWith('layer-') && !keepLayers) continue; await rawDel(cid).catch(() => {}); removed++; continue; }
+    if (mains.has(base) && i >= mains.get(base)) { await rawDel(cid); removed++; }
+  }
+  return removed;
+}

@@ -2,7 +2,7 @@
 import { S, wireAll, saveNow, bump, emit, buildDs, putDataset, slimDs, loadLayer, healLevels } from './model.js';
 import { dbGet, dbSet, dbDel, bytesToBase64 } from './util.js';
 import { BUILD } from './version.js';
-import { fbOn, fbGetText, fbPutText } from './firebase.js';
+import { fbOn, fbGetText, fbPutText, fbCleanup } from './firebase.js';
 
 const API = 'https://api.github.com';
 const enc = (p) => p.split('/').map(encodeURIComponent).join('/');
@@ -91,6 +91,7 @@ export async function push(scope, progress) {
   const manifest = { updatedAt: Date.now(), updatedISO: new Date().toISOString(), build: BUILD, scope: Object.keys(scope).filter((k) => scope[k]), files: files.map((f) => f[0]) };
   say('Menulis manifest…');
   await putText('manifest.json', JSON.stringify(manifest), 'Petaku: manifest sinkron');
+  if (fbOn()) { try { await fbCleanup(scope.layers ? S.layers.filter((l) => l.src === 'idb').map((l) => 'layer-' + l.id + '.geojson') : null); } catch (e) { console.warn('bersih-bersih server gagal', e); } }
   cfg().lastManifest = String(manifest.updatedAt); cfg().lastPull = Date.now();
   await saveNow();
   return manifest;
