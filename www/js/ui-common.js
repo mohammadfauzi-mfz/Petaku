@@ -62,3 +62,15 @@ export function check(checked, onChange, text) {
   inp.addEventListener('change', () => onChange(inp.checked));
   return h('label', { style: { display: 'flex', gap: '7px', alignItems: 'center', fontSize: '14px' } }, inp, text);
 }
+
+// kolom password dengan tombol mata untuk mengintip; elemen hasil tetap punya .value / .focus() seperti <input>
+export function eyeWrap(inp) {
+  const btn = h('button', { type: 'button', class: 'eyebtn', 'aria-label': 'Tampilkan password', onclick: () => {
+    const show = inp.type === 'password'; inp.type = show ? 'text' : 'password';
+    btn.textContent = show ? '🙈' : '👁'; btn.setAttribute('aria-label', show ? 'Sembunyikan password' : 'Tampilkan password');
+  } }, '👁');
+  const w = h('div', { class: 'eyewrap' }, inp, btn);
+  Object.defineProperty(w, 'value', { get: () => inp.value, set: (v) => { inp.value = v; } });
+  w.focus = () => inp.focus();
+  return w;
+}

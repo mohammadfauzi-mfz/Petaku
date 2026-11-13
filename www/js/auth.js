@@ -1,7 +1,7 @@
 // Login pengguna (Admin / User). Daftar akun disimpan di sync/users.json pada repo (password di-hash PBKDF2),
 // dan di-cache di HP agar login tetap jalan tanpa internet. Ini penguncian aplikasi, bukan keamanan tingkat server.
 import { h, $, toast, select, dbGet, dbSet, dbDel, bytesToBase64, base64ToBytes } from './util.js';
-import { openSheet, confirmBox, textInput, row } from './ui-common.js';
+import { openSheet, confirmBox, textInput, row, eyeWrap } from './ui-common.js';
 import { remoteText, pushText } from './sync.js';
 import { fbOn, fbRestore, fbSignIn, fbSignOut, fbRefresh, fbLoadRole, fbSession, fbAddUser, fbListMembers, fbRemoveMember, fbResetPassword } from './firebase.js';
 
@@ -89,7 +89,7 @@ function fbLoginScreen() {
       const box = h('div', { class: 'loginbox' });
       box.append(h('div', { class: 'logo' }, '🗺'), h('h2', {}, 'Petaku'));
       const em = textInput('', () => {}, { placeholder: 'Email', autocapitalize: 'none', autocomplete: 'username', type: 'email' });
-      const pw = h('input', { type: 'password', placeholder: 'Password', autocomplete: 'current-password' });
+      const pw = eyeWrap(h('input', { type: 'password', placeholder: 'Password', autocomplete: 'current-password' }));
       const err = h('div', { class: 'loginmsg' }, msg);
       const btn = h('button', { class: 'btn block' }, 'Masuk');
       const go = async () => {
@@ -126,11 +126,11 @@ function loginScreen() {
         wrap.append(box); return;
       }
       const un = textInput('', () => {}, { placeholder: 'Username', autocapitalize: 'none', autocomplete: 'username' });
-      const pw = h('input', { type: 'password', placeholder: 'Password', autocomplete: 'current-password' });
+      const pw = eyeWrap(h('input', { type: 'password', placeholder: 'Password', autocomplete: 'current-password' }));
       if (mode === 'setup') {
         box.append(h('div', { class: 'mut small' }, 'Belum ada akun di repo ini. Buat akun Admin pertama. Setelah itu kirim daftar akun lewat ⚙ → Kelola akun → Kirim akun, agar pengguna lain bisa masuk.'));
         const nm = textInput('', () => {}, { placeholder: 'Nama lengkap' });
-        const pw2 = h('input', { type: 'password', placeholder: 'Ulangi password', autocomplete: 'new-password' });
+        const pw2 = eyeWrap(h('input', { type: 'password', placeholder: 'Ulangi password', autocomplete: 'new-password' }));
         box.append(nm, un, pw, pw2, err);
         box.append(h('button', { class: 'btn block', onclick: async () => {
           if (busy) return;
@@ -201,7 +201,7 @@ export function openAccounts() {
     const b = h('div', {});
     const un = textInput(f.u, (v) => { f.u = v; }, { placeholder: 'username (huruf kecil/angka)', autocapitalize: 'none' });
     if (!isNew) un.disabled = true;
-    const pw = h('input', { type: 'password', placeholder: isNew ? 'Password' : 'Password baru (kosongkan bila tidak diganti)', autocomplete: 'new-password' });
+    const pw = eyeWrap(h('input', { type: 'password', placeholder: isNew ? 'Password' : 'Password baru (kosongkan bila tidak diganti)', autocomplete: 'new-password' }));
     b.append(row('Username', un), row('Nama', textInput(f.name, (v) => { f.name = v; })), row('Role', select([['user', 'User'], ['admin', 'Admin']], f.role, (v) => { f.role = v; })), row('Password', pw));
     b.append(h('div', { class: 'mut small' }, `Password minimal ${MINPW} karakter; sebaiknya 8+ karena daftar akun tersimpan di repo.`));
     const save = async () => {
@@ -282,7 +282,7 @@ async function openFbAccounts() {
   };
   const em = textInput('', () => {}, { placeholder: 'Email pengguna', autocapitalize: 'none', type: 'email' });
   const nm = textInput('', () => {}, { placeholder: 'Nama (opsional)' });
-  const pw = h('input', { type: 'password', placeholder: 'Password awal (min. 6 karakter)', autocomplete: 'new-password' });
+  const pw = eyeWrap(h('input', { type: 'password', placeholder: 'Password awal (min. 6 karakter)', autocomplete: 'new-password' }));
   const add = h('button', { class: 'btn', onclick: async () => {
     const e = em.value.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(e)) return toast('Format email tidak valid');

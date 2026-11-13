@@ -1,6 +1,6 @@
 import { S, saveNow, VERSION } from './model.js';
 import { h, toast, select, uiMode, setUiMode } from './util.js';
-import { openSheet, row, textInput, check } from './ui-common.js';
+import { openSheet, row, textInput, check, eyeWrap } from './ui-common.js';
 import { push, pull, checkRemote, checkConfig } from './sync.js';
 import { checkUpdate, installUpdate, BUILD } from './update.js';
 import { petaku } from './native.js';
@@ -20,7 +20,7 @@ export function openSettings() {
   const sc = h('div', { class: 'card' }, h('h3', {}, fbOn() ? 'Sinkron data (Firebase)' : 'Sinkron data (GitHub)'));
   sc.append(h('div', { class: 'mut small' }, fbOn() ? 'Data (CSV, tema, layer, pengaturan) disimpan di server Firebase. Admin mengirim data; pengguna menarik data terbaru (otomatis saat aplikasi dibuka bila ada internet). Data unduhan menggantikan unduhan lama, dan data yang Anda impor sendiri tidak tersentuh.' : 'Data (CSV, tema, layer tambahan) disimpan di folder “sync” pada repo GitHub, sehingga pengguna lain bisa menarik data terbaru. Yang menarik data cukup mengisi nama repo (repo publik tanpa token).'));
   if (!fbOn()) sc.append(row('Repo', textInput(c.repo, (v) => { c.repo = v.trim(); saveNow(); }, { placeholder: 'pemilik/nama-repo', autocapitalize: 'none' })));
-  const tok = textInput(c.token, (v) => { c.token = v.trim(); saveNow(); }, { placeholder: 'ghp_… / github_pat_… (untuk mengirim)', type: 'password', autocapitalize: 'none' });
+  const tok = eyeWrap(textInput(c.token, (v) => { c.token = v.trim(); saveNow(); }, { placeholder: 'ghp_… / github_pat_… (untuk mengirim)', type: 'password', autocapitalize: 'none' }));
   if (admin && !fbOn()) sc.append(row('Token', tok));
   if (admin && !fbOn()) sc.append(h('div', { class: 'mut small' }, 'Token hanya perlu untuk MENGIRIM data (atau bila repo privat): GitHub → Settings → Developer settings → Fine-grained tokens → pilih repo ini → Permissions: Contents = Read and write. Token disimpan hanya di HP ini dan tidak ikut tersinkron.'));
   const sc2 = h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '10px', margin: '8px 0' } },
