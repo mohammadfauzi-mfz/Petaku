@@ -592,17 +592,24 @@ export function filterSummary(t) {
 export function ensureStyles(meta, feats) {
   if (meta._sv === S.ver && meta._st === S.themeId) return;
   const t = theme();
-  let dups = null;
-  if (S.cfg && S.cfg.ignoreDup !== false) {
-    const cnt = new Map(); dups = new Set();
-    for (const f of feats) { if (!f.polys) continue; const k = normKey(getProp(f.props, meta.keyField)); if (!k) continue; if (cnt.has(k)) dups.add(k); else cnt.set(k, 1); }
+  // kelompokkan poligon berkode sama (blok kembar)
+  const grp = new Map();
+  for (const f of feats) {
+    if (!f.polys) continue;
+    const k = normKey(getProp(f.props, meta.keyField)); if (!k) continue;
+    const sig = String(getProp(f.props, 'Estate') || '') + '|' + String(getProp(f.props, 'Afdeling') || '');
+    const g = grp.get(k) || { n: 0, sig: new Set() }; g.n++; g.sig.add(sig); grp.set(k, g);
   }
+  const ign = !(S.cfg && S.cfg.ignoreDup === false);
   for (const f of feats) {
     const key = normKey(getProp(f.props, meta.keyField));
-    const row = S.ds && !(dups && dups.has(key)) ? S.ds.map.get(key) || null : null;
-    f._dup = !!(dups && dups.has(key));
-    f._row = row;
-    f._style = resolveStyle(t, row, f.props, key);
+    const g = grp.get(key), isDup = !!(g && g.n > 1);
+    const any = S.ds ? S.ds.map.get(key) || null : null;
+    f._dup = ign && isDup;                       // pewarnaan: kembar diabaikan (tanpa data)
+    f._row = f._dup ? null : any;
+    f._rowAll = any;                             // baris CSV apa adanya (dipakai rekap, dihitung sekali per baris)
+    f._dupSame = isDup && g.sig.size === 1;      // kembar di estate+afdeling yang sama = satu blok terbagi
+    f._style = resolveStyle(t, f._row, f.props, key);
   }
   const on = filterActive(t);
   for (const f of feats) f._pass = on ? featPass(meta, f) : true;
