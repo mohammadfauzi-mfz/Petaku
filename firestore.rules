@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAdmin() {
+      return signedIn() && request.auth.token.email in
+        get(/databases/$(database)/documents/config/roles).data.admins;
+    }
+    function isMember() {
+      return isAdmin() || (signedIn() && exists(/databases/$(database)/documents/members/$(request.auth.token.email)));
+    }
+    // data sinkron: hanya anggota yang boleh baca, hanya Admin yang boleh tulis
+    match /sync/{doc} {
+      allow read: if isMember();
+      allow write: if isAdmin();
+    }
+    // daftar Admin: diatur manual lewat konsol
+    match /config/roles {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+    // pengguna terdaftar: Admin mengelola dari aplikasi; tiap pengguna hanya bisa membaca dokumennya sendiri
+    match /members/{email} {
+      allow get: if signedIn() && request.auth.token.email == email;
+      allow list, write: if isAdmin();
+    }
+  }
+}

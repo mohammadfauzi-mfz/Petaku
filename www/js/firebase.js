@@ -31,7 +31,9 @@ export async function fbSignOut() { ses = null; await dbDel('fb:session'); }
 export async function fbSignIn(email, pw) {
   const j = await post(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${KEY()}`, { email: String(email).trim(), password: pw, returnSecureToken: true });
   ses = { email: String(j.email || email).toLowerCase(), refreshToken: j.refreshToken, idToken: j.idToken, exp: Date.now() + (+j.expiresIn || 3600) * 1000, role: 'user', name: '' };
-  await fbLoadRole(); await saveSes(); return ses;
+  await fbLoadRole();
+  if (!ses.member) { ses = null; await dbDel('fb:session'); throw new Error('Akun ini belum didaftarkan oleh Admin Petaku'); }
+  await saveSes(); return ses;
 }
 // 'ok' | 'revoked' | 'offline'
 export async function fbRefresh(force) {
@@ -72,6 +74,7 @@ export async function fbLoadRole() {
   const vals = d && d.fields && d.fields.admins && d.fields.admins.arrayValue && d.fields.admins.arrayValue.values || [];
   const admins = vals.map((v) => String(v.stringValue || '').toLowerCase());
   ses.role = admins.includes(ses.email) ? 'admin' : 'user';
+  ses.member = ses.role === 'admin' || !!(await rawGet('members/' + encodeURIComponent(ses.email)).catch(() => null));
   const nm = d && d.fields && d.fields.names && d.fields.names.mapValue && d.fields.names.mapValue.fields;
   ses.name = (nm && nm[ses.email] && nm[ses.email].stringValue) || '';
   await saveSes();
@@ -107,4 +110,34 @@ export async function fbPutText(p, text) {
   const n = Math.max(1, Math.ceil(b64.length / CHUNK));
   for (let i = 0; i < n; i++) await rawPut(`${c}/${id}~c${i}`, { d: { stringValue: b64.slice(i * CHUNK, (i + 1) * CHUNK) } });
   await rawPut(`${c}/${id}`, { n: { integerValue: String(n) }, z: { stringValue: z }, t: { integerValue: String(Date.now()) } });
+}
+
+// ---- kelola pengguna (Admin) ----
+const memId = (email) => encodeURIComponent(String(email).trim().toLowerCase());
+const MSG2 = { EMAIL_EXISTS: 'EMAIL_EXISTS', WEAK_PASSWORD: 'Password terlalu lemah (minimal 6 karakter)', OPERATION_NOT_ALLOWED: 'Pendaftaran akun dimatikan di Firebase. Aktifkan: Authentication → Settings → User actions → Enable create (sign-up)', MISSING_EMAIL: 'Isi email' };
+// buat akun login (bila belum ada) lalu daftarkan sebagai anggota; hasil: 'baru' | 'sudah ada'
+export async function fbAddUser(email, password, name) {
+  email = String(email).trim().toLowerCase();
+  let status = 'baru';
+  try { await post(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${KEY()}`, { email, password, returnSecureToken: false }); }
+  catch (e) {
+    const c = String(e.code || '').split(' ')[0];
+    if (c === 'EMAIL_EXISTS') status = 'sudah ada';
+    else if (e.offline) throw e;
+    else throw new Error(MSG2[c] || e.message);
+  }
+  await rawPut('members/' + memId(email), { name: { stringValue: String(name || '') }, addedAt: { integerValue: String(Date.now()) } });
+  return status;
+}
+export async function fbListMembers() {
+  const d = await rawGet('members?pageSize=300'); const out = [];
+  for (const x of (d && d.documents) || []) out.push({ email: decodeURIComponent(x.name.split('/').pop()), name: (x.fields && x.fields.name && x.fields.name.stringValue) || '' });
+  return out.sort((a, b) => a.email.localeCompare(b.email));
+}
+export async function fbRemoveMember(email) {
+  const r = await fetch(`${DOCS()}/members/${memId(email)}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + await token() } });
+  if (!r.ok && r.status !== 404) throw new Error('Firestore ' + r.status);
+}
+export async function fbResetPassword(email) {
+  await post(`https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${KEY()}`, { requestType: 'PASSWORD_RESET', email: String(email).trim().toLowerCase() });
 }

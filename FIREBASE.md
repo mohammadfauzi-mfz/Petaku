@@ -10,33 +10,16 @@ Kosongkan `www/js/fbconfig.js` = pakai GitHub seperti biasa. Isi `apiKey` dan `p
 5. Edit `www/js/fbconfig.js` di repo GitHub: isi `apiKey` dan `projectId`, lalu commit → build otomatis.
 
 ## 2. Aturan akses (Firestore → Rules → ganti semuanya → Publish)
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    function signedIn() { return request.auth != null; }
-    function isAdmin() {
-      return signedIn() && request.auth.token.email in
-        get(/databases/$(database)/documents/config/roles).data.admins;
-    }
-    match /sync/{doc} {
-      allow read: if signedIn();
-      allow write: if isAdmin();
-    }
-    match /config/roles {
-      allow read: if signedIn();
-      allow write: if false;
-    }
-  }
-}
-```
+Tempel isi berkas `firestore.rules`.
 
 ## 3. Tentukan Admin
 Firestore → **Start collection** → ID koleksi `config` → ID dokumen `roles` → tambah field:
 - `admins` bertipe **array**, isi string email Admin (huruf kecil), mis. `mohammad.fauzi@dsngroup.co.id`.
 
-## 4. Buat akun pengguna
-**Authentication → Users → Add user** (email + password). Tidak ada pendaftaran bebas: hanya akun yang Anda buat yang bisa masuk. Nonaktifkan / hapus akun di sini untuk mencabut akses.
+## 4. Buat akun pengguna (dari aplikasi)
+Masuk sebagai Admin → Pengaturan (⚙) → **Kelola akun** → isi email, nama, password awal → **Tambah pengguna**. Akun login dibuat otomatis dan didaftarkan sebagai anggota. Fitur ini membutuhkan **Authentication → Settings → User actions → Enable create (sign-up)** dalam keadaan aktif (bawaan Firebase).
+Orang yang membuat akun sendiri di luar daftar ini tidak bisa membaca data, karena aturan akses hanya mengizinkan Admin dan anggota terdaftar.
+Cabut akses: tombol **Cabut** di Kelola akun. Lupa password: tombol **Reset password** (email dikirim oleh Firebase).
 
 ## 5. Pakai
 - Admin: masuk dengan email Admin → Pengaturan (⚙) → **Kirim data saya**.

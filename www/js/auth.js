@@ -3,7 +3,7 @@
 import { h, $, toast, select, dbGet, dbSet, dbDel, bytesToBase64, base64ToBytes } from './util.js';
 import { openSheet, confirmBox, textInput, row } from './ui-common.js';
 import { remoteText, pushText } from './sync.js';
-import { fbOn, fbRestore, fbSignIn, fbSignOut, fbRefresh, fbLoadRole, fbSession } from './firebase.js';
+import { fbOn, fbRestore, fbSignIn, fbSignOut, fbRefresh, fbLoadRole, fbSession, fbAddUser, fbListMembers, fbRemoveMember, fbResetPassword } from './firebase.js';
 
 const ITER = 150000;
 const te = new TextEncoder();
@@ -190,7 +190,7 @@ async function touchDB() { DB.updatedAt = Date.now(); DB.dirty = true; await sav
 
 export function openAccounts() {
   if (!isAdmin()) { toast('Hanya Admin'); return; }
-  if (fbOn()) { toast('Akun dikelola di Firebase Console → Authentication', 4500); return; }
+  if (fbOn()) return openFbAccounts();
   const body = h('div', {});
   let close;
   const adminCount = () => DB.users.filter((x) => x.role === 'admin').length;
@@ -259,8 +259,39 @@ export function accountCard() {
   if (!me) return c;
   c.append(h('div', {}, h('b', {}, me.name || me.u), ` · ${roleLabel(me.role)} (${me.u})`));
   const bt = h('div', { class: 'btns' });
-  if (isAdmin() && !fbOn()) bt.append(h('button', { class: 'btn sec', onclick: openAccounts }, 'Kelola akun'));
+  if (isAdmin()) bt.append(h('button', { class: 'btn sec', onclick: openAccounts }, 'Kelola akun'));
   bt.append(h('button', { class: 'btn red', onclick: async () => { if (await confirmBox('Keluar dari akun ini?', 'Keluar')) logout(); } }, 'Keluar'));
   c.append(bt);
   return c;
+}
+
+async function openFbAccounts() {
+  const body = h('div', {});
+  const list = h('div', {});
+  let close;
+  const draw = async () => {
+    list.innerHTML = '<div class="mut small">Memuat…</div>';
+    let ms = [];
+    try { ms = await fbListMembers(); } catch (e) { list.innerHTML = ''; list.append(h('div', { class: 'hint' }, e.message)); return; }
+    list.innerHTML = '';
+    if (!ms.length) list.append(h('div', { class: 'mut small' }, 'Belum ada pengguna terdaftar (Admin tidak perlu didaftarkan).'));
+    for (const m of ms) list.append(h('div', { class: 'cellrow', style: { alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
+      h('div', { style: { flex: 1, minWidth: '160px', wordBreak: 'break-all' } }, h('b', {}, m.name || m.email), m.name ? h('div', { class: 'mut small' }, m.email) : null),
+      h('button', { class: 'btn sec sm', onclick: async () => { try { await fbResetPassword(m.email); toast('Email reset password dikirim ke ' + m.email, 3500); } catch (e) { toast(e.message, 4000); } } }, 'Reset password'),
+      h('button', { class: 'btn sec sm danger', onclick: async () => { if (!await confirmBox(`Cabut akses ${m.email}? Akun login tetap ada di Firebase, tapi tidak bisa membaca data lagi.`, 'Cabut')) return; try { await fbRemoveMember(m.email); toast('Akses dicabut'); draw(); } catch (e) { toast(e.message, 4000); } } }, 'Cabut')));
+  };
+  const em = textInput('', () => {}, { placeholder: 'Email pengguna', autocapitalize: 'none', type: 'email' });
+  const nm = textInput('', () => {}, { placeholder: 'Nama (opsional)' });
+  const pw = h('input', { type: 'password', placeholder: 'Password awal (min. 6 karakter)', autocomplete: 'new-password' });
+  const add = h('button', { class: 'btn', onclick: async () => {
+    const e = em.value.trim().toLowerCase();
+    if (!/^\S+@\S+\.\S+$/.test(e)) return toast('Format email tidak valid');
+    if (pw.value.length < 6) return toast('Password minimal 6 karakter');
+    add.disabled = true;
+    try { const st = await fbAddUser(e, pw.value, nm.value); toast(st === 'baru' ? 'Akun dibuat dan didaftarkan' : 'Akun sudah ada, hanya didaftarkan (password lama tetap)', 3500); em.value = ''; nm.value = ''; pw.value = ''; draw(); }
+    catch (er) { toast(er.message, 5000); } finally { add.disabled = false; }
+  } }, '+ Tambah pengguna');
+  body.append(h('div', { class: 'mut small' }, 'Pengguna biasa hanya bisa membaca data. Berikan email dan password awal kepada yang bersangkutan.'), em, nm, pw, add, h('h4', {}, 'Pengguna terdaftar'), list);
+  close = openSheet('Kelola akun', body);
+  draw();
 }
