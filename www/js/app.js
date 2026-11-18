@@ -17,6 +17,7 @@ import { requireLogin, backgroundCheck, isAdmin } from './auth.js';
 import { fbOn } from './firebase.js';
 import { pull } from './sync.js';
 import { PRESETS } from './ui-tables.js';
+import { initNotes, onNotes, syncNotes, flush, notesOn } from './notes.js';
 applyUiMode();
 try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyUiMode); } catch (e) { /* abaikan */ }
 
@@ -82,6 +83,7 @@ async function startupChecks() {
 
 async function boot() {
   await init();
+  await initNotes();
   await requireLogin();
   // tema lama belum punya tabel info: isi tabel bawaan (aman, tabel tanpa data otomatis tersembunyi)
   for (const t of S.themes) if (t.tables === undefined) t.tables = [PRESETS.lsu(), PRESETS.plan26(), PRESETS.yoy()];
@@ -128,6 +130,16 @@ async function boot() {
       if (r.newer) { const res = await pull({ data: true, themes: true, layers: true, cfg: true }); fillThemeSel(); toast('Data terbaru diunduh: ' + res.done.join(', '), 4000); }
     } catch (e) { console.warn('auto-tarik gagal', e); }
   }, 6000);
+  // catatan: gambar ulang penanda saat berubah; sinkron saat dibuka, saat online lagi, dan berkala
+  onNotes(() => requestDraw());
+  if (notesOn()) {
+    const sn = () => { if (navigator.onLine && notesOn()) syncNotes().catch((e) => console.warn('sinkron catatan', e)); };
+    setTimeout(sn, 3500);
+    window.addEventListener('online', () => setTimeout(sn, 800));
+    setInterval(() => { if (!document.hidden) sn(); }, 5 * 60 * 1000);
+    if (cap && cap.Plugins && cap.Plugins.App) cap.Plugins.App.addListener('appStateChange', (st) => { if (st.isActive) sn(); });
+    void flush;
+  }
   window.__app = { S, showPage, handleIncoming };
 }
 boot().catch((e) => { console.error(e); $('#loading').textContent = 'Gagal memulai: ' + e.message; });

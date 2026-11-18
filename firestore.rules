@@ -19,6 +19,23 @@ service cloud.firestore {
       allow read: if signedIn();
       allow write: if false;
     }
+    // kategori catatan & alamat server foto: anggota membaca, hanya Admin yang menulis
+    match /config/categories {
+      allow read: if isMember();
+      allow write: if isAdmin();
+    }
+    match /config/app {
+      allow read: if isMember();
+      allow write: if isAdmin();
+    }
+    // catatan per blok: semua anggota membaca; penulis (atau Admin) mengubah; penulisnya tidak bisa dipalsukan
+    match /notes/{id} {
+      allow read: if isMember();
+      allow create: if isMember() && request.resource.data.by == request.auth.token.email;
+      allow update: if isMember() && (isAdmin() || resource.data.by == request.auth.token.email)
+                    && request.resource.data.by == resource.data.by;
+      allow delete: if isAdmin();
+    }
     // pengguna terdaftar: Admin mengelola dari aplikasi; tiap pengguna hanya bisa membaca dokumennya sendiri
     match /members/{email} {
       allow get: if signedIn() && request.auth.token.email == email;

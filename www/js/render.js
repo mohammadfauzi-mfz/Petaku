@@ -1,6 +1,7 @@
 // Penggambar peta (dipakai layar dan ekspor)
 import { S, theme, ensureStyles, ensurePass, filterActive, filterHides, filterDims, labelLines, getProp } from './model.js';
 import { featPath, linePath, labelAnchor } from './geo.js';
+import { hasNotes, openCount, marksOn, noteKeyOf, notesOn } from './notes.js';
 
 const patCache = new Map();
 const lblCache = { key: '', map: new Map() };
@@ -105,6 +106,27 @@ export function renderMap(ctx, v, o) {
     ctx.setLineDash([]);
   }
   ctx.restore();
+
+  // penanda catatan (hanya di layar)
+  if (o.screen && notesOn() && marksOn()) {
+    ctx.save(); ctx.translate(tx, ty); ctx.scale(s, s);
+    for (const meta of S.layers) {
+      if (!meta.visible || !meta.themed) continue;
+      const rt = S.rt.get(meta.id); if (!rt || !rt.feats) continue;
+      for (const f of rt.feats) {
+        if (!f.polys) continue;
+        const b = f.bbox;
+        if (b[2] < x0 || b[0] > x1 || b[3] < y0 || b[1] > y1 || (b[2] - b[0]) * s < 6) continue;
+        if (f._nk === undefined) f._nk = noteKeyOf(meta, f);
+        if (!hasNotes(f._nk)) continue;
+        const a = labelAnchor(f); if (!a) continue;
+        const r = Math.max(2.5, Math.min(4.5, (b[2] - b[0]) * s * 0.3)) / s, cx = Math.min(a.x + a.w * 0.5, b[2] - r), cy = Math.max(a.y - a.h * 0.5, b[1] + r);
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fillStyle = openCount(f._nk) ? '#ff9800' : '#2e9e5b'; ctx.fill();
+        ctx.lineWidth = 1.2 / s; ctx.strokeStyle = '#fff'; ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
 
   // sorotan
   if (o.highlight && o.highlight.polys) {

@@ -3,6 +3,8 @@ import { buildTables, tableSourceCols } from './ui-tables.js';
 import { buildCharts } from './ui-charts.js';
 import { S, theme, getProp, getField, afdCombined, afdDatasets } from './model.js';
 import { h, num, toast } from './util.js';
+import { notesOn, notesFor, noteKeyOf } from './notes.js';
+import { buildNotesPane } from './ui-notes.js';
 
 const METRICS = ['Yld', 'YOY', 'BBC3', 'BBC3S', 'std.S3', 'AP', 'Evaluasi'];
 const HIDE_EMPTY = (v) => { const s = String(v == null ? '' : v).trim(); return s === '' || s === '-' || s.startsWith('#'); };
@@ -149,21 +151,28 @@ export function buildAfdCard(layer, feat) {
 }
 
 let lastTab = 'blok';
-// kartu info dengan sub tab Blok | Afdeling (tab hanya ada bila ada CSV afdeling)
+// kartu info dengan sub tab Blok | Afdeling | Catatan (Afdeling bila ada CSV afdeling, Catatan bila login Firebase)
 export function buildInfo(layer, feat) {
   const blok = buildBlockCard(layer, feat);
-  if (!hasAfdTab(feat)) return blok;
+  const withAfd = hasAfdTab(feat), withNotes = notesOn();
+  if (!withAfd && !withNotes) return blok;
   const wrap = h('div', {});
   const pane = h('div', {});
-  let afdCard = null;
+  let afdCard = null, noteCard = null;
   const tabs = h('div', { class: 'ictabs' });
+  const defs = [['blok', 'Blok']];
+  if (withAfd) defs.push(['afd', 'Afdeling']);
+  if (withNotes) { const n = notesFor(noteKeyOf(layer, feat)).length; defs.push(['cat', n ? `Catatan (${n})` : 'Catatan']); }
   const show = (k) => {
+    if (!defs.some((d) => d[0] === k)) k = 'blok';
     lastTab = k;
     tabs.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.k === k));
     pane.innerHTML = '';
-    if (k === 'afd') { if (!afdCard) afdCard = buildAfdCard(layer, feat); pane.append(afdCard); } else pane.append(blok);
+    if (k === 'afd') { if (!afdCard) afdCard = buildAfdCard(layer, feat); pane.append(afdCard); }
+    else if (k === 'cat') { if (!noteCard) noteCard = buildNotesPane(layer, feat); pane.append(noteCard); }
+    else pane.append(blok);
   };
-  for (const [k, l] of [['blok', 'Blok'], ['afd', 'Afdeling']]) tabs.append(h('button', { class: 'ictab', 'data-k': k, onclick: () => show(k) }, l));
+  for (const [k, l] of defs) tabs.append(h('button', { class: 'ictab', 'data-k': k, onclick: () => show(k) }, l));
   wrap.append(tabs, pane);
   show(lastTab);
   return wrap;

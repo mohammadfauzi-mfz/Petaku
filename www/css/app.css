@@ -237,3 +237,17 @@ h4{margin:12px 0 4px;font-size:13px}
 .eyewrap{position:relative;display:block;width:100%}
 .eyewrap>input{width:100%;box-sizing:border-box;padding-right:44px}
 .eyebtn{position:absolute;right:4px;top:50%;transform:translateY(-50%);border:0;background:transparent;font-size:18px;line-height:1;padding:8px 10px;cursor:pointer}
+/* catatan per blok */
+.nt-i{border:1px solid var(--line,#dde5e0);border-radius:12px;padding:10px;margin:0 0 8px;background:var(--card,#fff)}
+.nt-i.done{opacity:.72}
+.nt-top{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:6px}
+.nt-st{cursor:pointer}
+.nt-tx{white-space:pre-wrap;word-break:break-word;font-size:14px;margin:4px 0}
+.nt-phs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+.nt-thw{position:relative;display:inline-block}
+.nt-th{width:76px;height:76px;object-fit:cover;border-radius:8px;border:1px solid var(--line,#ddd);background:#e5ebe8;display:block}
+.nt-th-x{opacity:.5}
+.nt-rm{position:absolute;top:-6px;right:-6px;width:22px;height:22px;border-radius:50%;border:0;background:#d32f2f;color:#fff;font-size:12px;line-height:22px;padding:0}
+.nt-ft{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--mut,#667);margin-top:6px}
+.nt-act{margin-left:auto;display:flex;gap:6px}
+.nt-wait{color:#c77700;font-weight:700}

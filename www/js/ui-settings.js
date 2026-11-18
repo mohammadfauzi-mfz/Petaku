@@ -6,6 +6,8 @@ import { checkUpdate, installUpdate, BUILD } from './update.js';
 import { petaku } from './native.js';
 import { isAdmin, accountCard } from './auth.js';
 import { fbOn } from './firebase.js';
+import { notesSettingsCard } from './ui-notes.js';
+import { syncNotes } from './notes.js';
 
 const fmtTime = (ms) => { if (!ms) return '–'; try { return new Date(Number(ms)).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return String(ms); } };
 
@@ -45,6 +47,7 @@ export function openSettings() {
     const r = await pull(c.scope, say);
     say(`✔ Ditarik: ${r.done.join(', ') || 'tidak ada perubahan'} (data per ${fmtTime(r.manifest.updatedAt)})`);
     toast('Data terbaru sudah ditarik');
+    syncNotes().catch(() => {});
   });
   bPush.onclick = () => run(bPush, async () => {
     const m = await push(c.scope, say);
@@ -60,6 +63,7 @@ export function openSettings() {
   sc.append(h('div', { class: 'btns' }, bPull, admin ? bPush : null, bCheck));
   sc.append(status);
   body.append(sc);
+  const nc = notesSettingsCard(); if (nc) body.append(nc);
   body.append(h('div', { class: 'card' }, h('h3', {}, 'Tampilan aplikasi'),
     row('Mode', select([['auto', 'Ikuti HP (otomatis)'], ['light', 'Terang'], ['dark', 'Gelap']], uiMode(), (v) => setUiMode(v))),
     h('div', { class: 'mut small' }, 'Hanya mengubah tampilan aplikasi. Peta dan hasil ekspor tetap berlatar putih.')));

@@ -74,9 +74,10 @@ export async function fbLoadRole() {
   const vals = d && d.fields && d.fields.admins && d.fields.admins.arrayValue && d.fields.admins.arrayValue.values || [];
   const admins = vals.map((v) => String(v.stringValue || '').toLowerCase());
   ses.role = admins.includes(ses.email) ? 'admin' : 'user';
-  ses.member = ses.role === 'admin' || !!(await rawGet('members/' + encodeURIComponent(ses.email)).catch(() => null));
+  const md = await rawGet('members/' + encodeURIComponent(ses.email)).catch(() => null);
+  ses.member = ses.role === 'admin' || !!md;
   const nm = d && d.fields && d.fields.names && d.fields.names.mapValue && d.fields.names.mapValue.fields;
-  ses.name = (nm && nm[ses.email] && nm[ses.email].stringValue) || '';
+  ses.name = (nm && nm[ses.email] && nm[ses.email].stringValue) || (md && md.fields && md.fields.name && md.fields.name.stringValue) || '';
   await saveSes();
 }
 
@@ -168,4 +169,22 @@ export async function fbCleanup(layerFiles) {
     if (mains.has(base) && i >= mains.get(base)) { await rawDel(cid); removed++; }
   }
   return removed;
+}
+
+// ---- dokumen umum (catatan, kategori, alamat Apps Script) ----
+export const fbToken = token;
+export async function fbDocGet(path) { return rawGet(path); }
+export async function fbDocSet(path, fields) {
+  const r = await fetch(`${DOCS()}/${path}`, { method: 'PATCH', headers: { Authorization: 'Bearer ' + await token(), 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) });
+  if (r.status === 403) throw new Error('Ditolak oleh aturan Firestore (tempel aturan terbaru dari Admin).');
+  if (!r.ok) throw new Error('Firestore ' + r.status);
+}
+// catatan yang berubah sejak waktu tertentu (ms), urut naik
+export async function fbQueryNotes(since) {
+  const body = { structuredQuery: { from: [{ collectionId: 'notes' }], where: { fieldFilter: { field: { fieldPath: 'updatedAt' }, op: 'GREATER_THAN_OR_EQUAL', value: { integerValue: String(Math.max(0, Number(since) || 0)) } } }, orderBy: [{ field: { fieldPath: 'updatedAt' }, direction: 'ASCENDING' }], limit: 500 } };
+  const r = await fetch(`${DOCS()}:runQuery`, { method: 'POST', headers: { Authorization: 'Bearer ' + await token(), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (r.status === 403) throw new Error('Ditolak oleh aturan Firestore (belum dipasang aturan catatan).');
+  if (!r.ok) throw new Error('Firestore ' + r.status);
+  const j = await r.json();
+  return (j || []).filter((x) => x.document).map((x) => x.document);
 }
