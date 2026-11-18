@@ -29,6 +29,12 @@ Tombol **Kelola kategori** untuk menambah/mengubah kategori dan sub kategori (be
 ## 4. Pakai
 Ketuk blok di peta → tab **Catatan** → **+ Catatan** → pilih kategori/sub kategori, tulis catatan, ambil foto/galeri (otomatis dikompres ke ±100–150 KB) → Simpan. Catatan tetap tersimpan tanpa sinyal dan terkirim saat online. Blok yang punya catatan diberi titik di peta (oranye = ada yang terbuka, hijau = selesai semua).
 
+## Fitur lain
+- **Volume & progres:** isi Volume + satuan (mis. 100 m). Tombol **Progres** memperbarui realisasi, bar progres berubah, dan status otomatis Selesai saat 100%.
+- **Koordinat:** catatan yang dibuat dengan **Ambil foto** otomatis menyimpan koordinat HP; titiknya muncul di peta sesuai koordinat itu. Ketuk titik di peta untuk melihat **jarak dan arah** dari posisi Anda (panah mengikuti kompas HP bila tersedia).
+- **Sinkron catatan** ada di tab **Data** (kartu "Catatan blok"). **Pilih area** untuk mengunduh/menampilkan catatan Estate/Afdeling tertentu saja.
+- **Tes server foto** di Pengaturan → Catatan & foto: memastikan HP bisa menghubungi Apps Script. Bila gagal, pesannya menyebut penyebabnya.
+
 ## Tips
 - Nama penulis diambil dari nama akun. Agar nama Admin tampil (bukan potongan email), tambahkan email Admin sendiri lewat **Kelola akun → Tambah** dengan nama lengkap (akun yang sudah ada tidak diubah passwordnya).
 - Menghapus catatan menghapus foto-fotonya dari Drive (masuk Tempat Sampah Drive).

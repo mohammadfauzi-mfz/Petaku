@@ -1,7 +1,7 @@
 // Penggambar peta (dipakai layar dan ekspor)
 import { S, theme, ensureStyles, ensurePass, filterActive, filterHides, filterDims, labelLines, getProp } from './model.js';
-import { featPath, linePath, labelAnchor } from './geo.js';
-import { hasNotes, openCount, marksOn, noteKeyOf, notesOn } from './notes.js';
+import { featPath, linePath, labelAnchor, toWorld } from './geo.js';
+import { hasNotes, openCount, marksOn, noteKeyOf, notesOn, coordNotes } from './notes.js';
 
 const patCache = new Map();
 const lblCache = { key: '', map: new Map() };
@@ -124,6 +124,15 @@ export function renderMap(ctx, v, o) {
         ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fillStyle = openCount(f._nk) ? '#ff9800' : '#2e9e5b'; ctx.fill();
         ctx.lineWidth = 1.2 / s; ctx.strokeStyle = '#fff'; ctx.stroke();
       }
+    }
+    // catatan berkoordinat: digambar di titiknya (cincin putih + titik; batang kecil = punya volume/progres)
+    for (const n of coordNotes()) {
+      const [wx, wy] = toWorld(n.lon, n.lat);
+      if (wx < x0 || wx > x1 || wy < y0 || wy > y1) continue;
+      const r = 5.5 / s;
+      ctx.beginPath(); ctx.arc(wx, wy, r, 0, 7); ctx.fillStyle = n.status === 'selesai' ? '#2e9e5b' : '#ff9800'; ctx.fill();
+      ctx.lineWidth = 2 / s; ctx.strokeStyle = '#fff'; ctx.stroke();
+      ctx.lineWidth = 1 / s; ctx.strokeStyle = '#333'; ctx.beginPath(); ctx.arc(wx, wy, r + 1.2 / s, 0, 7); ctx.stroke();
     }
     ctx.restore();
   }

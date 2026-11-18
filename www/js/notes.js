@@ -1,7 +1,8 @@
 // Catatan per blok: disimpan di HP (bisa offline) dan disinkron ke Firestore (koleksi "notes"); foto ke Google Drive lewat Apps Script.
 import { dbGet, dbSet, dbDel } from './util.js';
 import { normKey } from './util.js';
-import { getProp, afdKey } from './model.js';
+import { getProp, afdKey, S } from './model.js';
+import { petaku } from './native.js';
 import { fbOn, fbSession, fbDocGet, fbDocSet, fbQueryNotes, fbToken } from './firebase.js';
 
 export const DEF_CATS = [
@@ -11,17 +12,17 @@ export const DEF_CATS = [
   { n: 'Lahan', s: ['Banjir / tergenang', 'Longsor', 'Klaim / konflik lahan'] },
   { n: 'Lainnya', s: [] },
 ];
-const N = { notes: {}, pend: [], delq: [], last: 0, cats: null, url: '', loaded: false, marks: true };
+const N = { notes: {}, pend: [], delq: [], last: 0, cats: null, url: '', loaded: false, marks: true, filter: [] };
 const subs = new Set();
-let byKey = new Map(), keyVer = 0;
+let byKey = new Map(), keyVer = 0, coordList = [];
 export const onNotes = (fn) => { subs.add(fn); return () => subs.delete(fn); };
 const emit = () => { rebuild(); subs.forEach((f) => { try { f(); } catch (e) { console.error(e); } }); };
 function rebuild() {
-  byKey = new Map(); keyVer++;
-  for (const n of Object.values(N.notes)) { if (n.del) continue; if (!byKey.has(n.key)) byKey.set(n.key, []); byKey.get(n.key).push(n); }
+  byKey = new Map(); keyVer++; coordList = [];
+  for (const n of Object.values(N.notes)) { if (n.del) continue; if (!byKey.has(n.key)) byKey.set(n.key, []); byKey.get(n.key).push(n); if (hasCoord(n)) coordList.push(n); }
   for (const a of byKey.values()) a.sort((x, y) => y.at - x.at);
 }
-async function save() { try { await dbSet('notes:v1', { notes: N.notes, pend: N.pend, delq: N.delq, last: N.last, cats: N.cats, url: N.url, marks: N.marks }); } catch (e) { console.error(e); } }
+async function save() { try { await dbSet('notes:v1', { notes: N.notes, pend: N.pend, delq: N.delq, last: N.last, cats: N.cats, url: N.url, marks: N.marks, filter: N.filter }); } catch (e) { console.error(e); } }
 
 export async function initNotes() {
   const d = await dbGet('notes:v1').catch(() => null);
@@ -30,9 +31,13 @@ export async function initNotes() {
 }
 export const notesOn = () => fbOn() && !!fbSession();
 export const notesVer = () => keyVer;
-export const hasNotes = (key) => byKey.has(key);
+export const hasCoord = (n) => Number.isFinite(n.lat) && Number.isFinite(n.lon) && (n.lat || n.lon);
+export const coordNotes = () => coordList;
+// penanda di tengah blok hanya untuk catatan tanpa koordinat; yang berkoordinat digambar di titiknya
+const plain = (key) => notesFor(key).filter((n) => !hasCoord(n));
+export const hasNotes = (key) => plain(key).length > 0;
 export const notesFor = (key) => byKey.get(key) || [];
-export const openCount = (key) => notesFor(key).filter((n) => n.status !== 'selesai').length;
+export const openCount = (key) => plain(key).filter((n) => n.status !== 'selesai').length;
 export const noteKeyOf = (layer, feat) => {
   const p = (feat && feat.props) || {};
   return normKey(getProp(p, 'Estate')) + '|' + afdKey(getProp(p, 'Afdeling')) + '|' + normKey(getProp(p, layer && layer.keyField ? layer.keyField : 'Blok'));
@@ -51,29 +56,38 @@ export const newId = () => 'n' + Date.now().toString(36) + Math.random().toStrin
 
 // ---- penyimpanan Firestore <-> objek ----
 const S_ = (v) => ({ stringValue: String(v == null ? '' : v) });
+const D_ = (v) => ({ doubleValue: +v || 0 });
 const I_ = (v) => ({ integerValue: String(Math.round(+v || 0)) });
 const toFields = (n) => ({
   key: S_(n.key), estate: S_(n.estate), afd: S_(n.afd), blok: S_(n.blok), cat: S_(n.cat), sub: S_(n.sub), text: S_(n.text), status: S_(n.status || 'buka'),
   by: S_(n.by), name: S_(n.name), at: I_(n.at), updatedAt: I_(n.updatedAt), del: I_(n.del ? 1 : 0),
   photos: { arrayValue: { values: (n.photos || []).map(S_) } },
+  vol: D_(n.vol), done: D_(n.done), unit: S_(n.unit),
+  lat: hasCoord(n) ? D_(n.lat) : { nullValue: null }, lon: hasCoord(n) ? D_(n.lon) : { nullValue: null }, acc: D_(n.acc),
 });
 function fromDoc(d) {
-  const f = d.fields || {}, s = (k) => (f[k] && f[k].stringValue) || '', i = (k) => +(f[k] && f[k].integerValue || 0);
+  const f = d.fields || {}, s = (k) => (f[k] && f[k].stringValue) || '', i = (k) => +(f[k] && f[k].integerValue || 0), dn = (k) => (f[k] && (f[k].doubleValue != null || f[k].integerValue != null) ? +(f[k].doubleValue != null ? f[k].doubleValue : f[k].integerValue) : NaN);
   return { id: decodeURIComponent(d.name.split('/').pop()), key: s('key'), estate: s('estate'), afd: s('afd'), blok: s('blok'), cat: s('cat'), sub: s('sub'), text: s('text'), status: s('status') || 'buka',
     by: s('by'), name: s('name'), at: i('at'), updatedAt: i('updatedAt'), del: i('del') ? 1 : 0,
+    vol: dn('vol') || 0, done: dn('done') || 0, unit: s('unit'), lat: dn('lat'), lon: dn('lon'), acc: dn('acc') || 0,
     photos: ((f.photos && f.photos.arrayValue && f.photos.arrayValue.values) || []).map((v) => v.stringValue).filter(Boolean), pp: [] };
 }
 
 // ---- Apps Script (foto di Google Drive) ----
 async function call(payload) {
   if (!N.url) throw new Error('Alamat Apps Script belum diisi Admin');
-  let r;
-  try { r = await fetch(N.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ token: await fbToken(), ...payload }) }); }
-  catch (e) { const er = new Error('Tidak bisa menghubungi server foto'); er.offline = true; throw er; }
-  let j; try { j = await r.json(); } catch (e) { throw new Error('Balasan server foto tidak dikenal (cek deploy Apps Script)'); }
+  const body = JSON.stringify({ token: await fbToken(), ...payload });
+  let text;
+  const pk = petaku();
+  try {
+    if (pk && pk.httpPost) { const r = await pk.httpPost({ url: N.url, body }); text = r.body; if (r.status >= 400 && !/^\s*[{]/.test(text || '')) throw new Error('HTTP ' + r.status); }
+    else { const r = await fetch(N.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body }); text = await r.text(); }
+  } catch (e) { const er = new Error('Tidak bisa menghubungi server foto (' + (e && e.message ? e.message : e) + ')'); er.offline = true; throw er; }
+  let j; try { j = JSON.parse(text); } catch (e) { throw new Error(/<html|<!doctype/i.test(text || '') ? 'Server foto membalas halaman web, bukan data: cek deploy Apps Script (akses harus "Siapa saja") dan URL berakhiran /exec' : 'Balasan server foto tidak dikenal'); }
   if (!j.ok) throw new Error(j.err || 'Server foto menolak');
   return j;
 }
+export async function pingServer() { const t = Date.now(); await call({ a: 'ping' }); return Date.now() - t; }
 // kompres gambar: sisi terpanjang <= 1280 px, kualitas diturunkan sampai <= maxKB
 export async function compressImage(file, maxKB) {
   maxKB = maxKB || 150;
@@ -189,7 +203,7 @@ export async function syncNotes() {
   let got = 0, mx = N.last || 0;
   for (const d of docs) {
     const n = fromDoc(d); mx = Math.max(mx, n.updatedAt);
-    if (N.pend.includes(n.id)) continue;
+    if (N.pend.includes(n.id) || !inFilter(n)) continue;
     const cur = N.notes[n.id];
     if (cur && cur.updatedAt >= n.updatedAt) continue;
     n.pp = cur ? (cur.pp || []) : [];
@@ -200,3 +214,28 @@ export async function syncNotes() {
 }
 // bersihkan data catatan lokal saat keluar akun
 export async function resetNotes() { N.notes = {}; N.pend = []; N.delq = []; N.last = 0; await save(); emit(); }
+
+// ---- filter area (Estate / Afdeling) untuk sinkron catatan ----
+// N.filter = daftar "estate|afdeling" (kunci ternormalisasi); kosong = semua area
+const pairOf = (key) => key.split('|').slice(0, 2).join('|');
+export const filterList = () => N.filter || [];
+export const inFilter = (n) => !N.filter || !N.filter.length || N.filter.includes(pairOf(n.key));
+export async function setFilter(list) {
+  N.filter = list || [];
+  // buang catatan lokal di luar area (kecuali yang belum terkirim)
+  for (const [id, n] of Object.entries(N.notes)) if (!inFilter(n) && !N.pend.includes(id)) delete N.notes[id];
+  N.last = 0; await save(); emit();
+}
+// daftar area dari data peta (blok) dan catatan yang ada: [{e, a, label}]
+export function areaOptions() {
+  const m = new Map();
+  const add = (e, a) => { if (!e && !a) return; const k = normKey(e) + '|' + afdKey(a); if (!m.has(k)) m.set(k, { k, e: String(e || ''), a: String(a || '') }); };
+  for (const l of S.layers) { if (!l.themed) continue; const rt = S.rt.get(l.id); if (!rt || !rt.feats) continue; for (const f of rt.feats) add(getProp(f.props, 'Estate'), getProp(f.props, 'Afdeling')); }
+  for (const n of Object.values(N.notes)) add(n.estate, n.afd);
+  return [...m.values()].sort((x, y) => (x.e + '|' + x.a).localeCompare(y.e + '|' + y.a, 'id', { numeric: true }));
+}
+export async function setProgress(n, done) {
+  const v = Math.max(0, +done || 0);
+  const fin = n.vol > 0 && v >= n.vol;
+  return saveNote({ ...n, done: v, status: fin ? 'selesai' : (n.status === 'selesai' && v < n.vol ? 'buka' : n.status) });
+}

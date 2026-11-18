@@ -3,6 +3,8 @@ import { openFilter } from './ui-filter.js';
 import { openSummary } from './ui-summary.js';
 import { renderMap, dataBounds, fitView } from './render.js';
 import { hitPolygon, distToFeat, toWorld, M_PER_UNIT } from './geo.js';
+import { coordNotes, notesOn, marksOn } from './notes.js';
+import { openNoteDetail } from './ui-notes.js';
 import { $, h, toast, normKey, hexA } from './util.js';
 import { openSheet } from './ui-common.js';
 import { buildInfo } from './ui-info.js';
@@ -284,6 +286,12 @@ export function initMap() {
     pts.delete(e.pointerId);
     if (pts.size < 2) pinch = null;
     if (pts.size === 0 && moved < 14 && Date.now() - t0 < 900 && e.type === 'pointerup') {
+      // ketukan di penanda catatan berkoordinat -> detail catatan + arah & jarak
+      if (notesOn() && marksOn()) {
+        let best = null, bd = 22;
+        for (const n of coordNotes()) { const [wx, wy] = toWorld(n.lon, n.lat); const d = Math.hypot((wx - view.cx) * view.scale + view.w / 2 - e.offsetX, (wy - view.cy) * view.scale + view.h / 2 - e.offsetY); if (d < bd) { bd = d; best = n; } }
+        if (best) { openNoteDetail(best); return; }
+      }
       const hits = hitTest(e.offsetX, e.offsetY);
       highlight = hits.find((x) => x.layer.themed) ? hits.find((x) => x.layer.themed).feat : null;
       requestDraw();

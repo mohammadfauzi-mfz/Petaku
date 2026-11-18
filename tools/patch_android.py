@@ -35,6 +35,8 @@ if 'android.intent.action.SEND' not in x:
     x = x[:i] + filters + '        ' + x[i:]
 if 'ACCESS_FINE_LOCATION' not in x:
     x = x.replace('</manifest>', '    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n</manifest>')
+if 'android.permission.CAMERA' not in x:
+    x = x.replace('</manifest>', '    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n</manifest>')
 if 'REQUEST_INSTALL_PACKAGES' not in x:
     x = x.replace('</manifest>', '    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />\n</manifest>')
 open(mf, 'w', encoding='utf-8').write(x)
@@ -53,6 +55,7 @@ open(os.path.join(xmldir, 'file_paths.xml'), 'w').write('''<?xml version="1.0" e
     <external-path name="my_images" path="." />
     <cache-path name="my_cache_images" path="." />
     <files-path name="my_files" path="." />
+    <external-files-path name="my_ext_files" path="." />
 </paths>
 ''')
 print('patch OK untuk', pkg)

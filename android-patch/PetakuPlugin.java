@@ -193,4 +193,70 @@ public class PetakuPlugin extends Plugin {
             }
         }).start();
     }
+
+    /** POST teks ke URL (Apps Script) tanpa batasan CORS; mengikuti pengalihan (302) sebagai GET. */
+    @PluginMethod
+    public void httpPost(final PluginCall call) {
+        final String url = call.getString("url");
+        final String body = call.getString("body");
+        if (url == null || url.length() == 0) {
+            call.reject("URL kosong");
+            return;
+        }
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    String cur = url;
+                    boolean post = true;
+                    byte[] data = (body == null ? "" : body).getBytes("UTF-8");
+                    HttpURLConnection c = null;
+                    int code = 0;
+                    for (int i = 0; i < 6; i++) {
+                        URL u = new URL(cur);
+                        c = (HttpURLConnection) u.openConnection();
+                        c.setInstanceFollowRedirects(false);
+                        c.setConnectTimeout(20000);
+                        c.setReadTimeout(60000);
+                        c.setRequestProperty("User-Agent", "Petaku");
+                        if (post) {
+                            c.setRequestMethod("POST");
+                            c.setDoOutput(true);
+                            c.setRequestProperty("Content-Type", "text/plain;charset=utf-8");
+                            c.setFixedLengthStreamingMode(data.length);
+                            OutputStream o = c.getOutputStream();
+                            o.write(data);
+                            o.close();
+                        }
+                        code = c.getResponseCode();
+                        if (code >= 300 && code < 400) {
+                            String loc = c.getHeaderField("Location");
+                            c.disconnect();
+                            if (loc == null) throw new IOException("redirect tanpa lokasi");
+                            cur = loc;
+                            post = false;
+                            continue;
+                        }
+                        break;
+                    }
+                    if (c == null) throw new IOException("tidak ada respons");
+                    InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+                    ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                    if (in != null) {
+                        byte[] buf = new byte[16384];
+                        int n;
+                        while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+                        in.close();
+                    }
+                    c.disconnect();
+                    JSObject r = new JSObject();
+                    r.put("status", code);
+                    r.put("body", new String(bo.toByteArray(), "UTF-8"));
+                    call.resolve(r);
+                } catch (Exception e) {
+                    call.reject(e.getMessage() == null ? "Gagal menghubungi server" : e.getMessage());
+                }
+            }
+        }).start();
+    }
 }

@@ -1,3 +1,4 @@
+import { notesDataCard } from './ui-notes.js';
 import { isAdmin } from './auth.js';
 import { S, afdKeyCol, afdRow, detectGroupCol, bump, buildDs, indexDs, autoKeyCol, computeStats, theme, loadLayer, putDataset, removeDataset, dsForTheme } from './model.js';
 import { parseCSV } from './geo.js';
@@ -120,6 +121,7 @@ export function renderData() {
   card.append(h('div', { class: 'btns' },
     h('button', { class: 'btn', onclick: async () => { const f = await pickFile('.csv,.txt,.tsv,text/csv,text/plain,text/comma-separated-values,application/vnd.ms-excel', true); if (f.length) await importCSVFiles(f); } }, S.dsList.length ? '+ Tambah CSV' : 'Impor CSV')));
   el.append(card);
+  const nc = notesDataCard(); if (nc) el.append(nc);
   if (!S.dsList.length) { el.append(h('div', { class: 'hint' }, 'Belum ada CSV. Peta tetap tampil, blok diwarnai setelah CSV diimpor.')); return; }
 
   const cur0 = S.ds && S.ds.merged ? (S.dsList.find((d) => d.id === S.ds.parts[0]) || S.ds) : S.ds;

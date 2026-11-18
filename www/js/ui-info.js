@@ -153,6 +153,7 @@ export function buildAfdCard(layer, feat) {
 let lastTab = 'blok';
 // kartu info dengan sub tab Blok | Afdeling | Catatan (Afdeling bila ada CSV afdeling, Catatan bila login Firebase)
 export function buildInfo(layer, feat) {
+  lastTab = 'blok';   // selalu mulai dari tab Blok
   const blok = buildBlockCard(layer, feat);
   const withAfd = hasAfdTab(feat), withNotes = notesOn();
   if (!withAfd && !withNotes) return blok;
