@@ -7,6 +7,26 @@ import { openZoom } from './ui-zoom.js';
 import { notesOn, notesFor, noteKeyOf, onNotes, catsList, DEF_CATS, saveNote, removeNote, removePhoto, canEdit, newId, pendingIds, compressImage, photoSrc, syncNotes, pendingCount, scriptUrl, saveUrl, saveCats, marksOn, setMarks, hasCoord, setProgress, areaOptions, filterList, setFilter, pingServer, coordNotes } from './notes.js';
 
 const MAXPH = 5;
+// kamera dalam aplikasi (getUserMedia): langsung membuka kamera belakang. Hasil: dataURL, null = dibatalkan, undefined = kamera tidak tersedia (pakai cara lain)
+async function cameraShot() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return undefined;
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }); }
+  catch (e) { return undefined; }
+  return new Promise((res) => {
+    const video = h('video', { autoplay: true, muted: true, playsinline: true, style: { flex: '1', minHeight: '0', width: '100%', objectFit: 'contain', background: '#000' } });
+    video.setAttribute('playsinline', ''); video.muted = true; video.srcObject = stream;
+    const fin = (v) => { stream.getTracks().forEach((t) => t.stop()); ov.remove(); res(v); };
+    const shot = h('button', { type: 'button', class: 'cam-shot', onclick: () => {
+      const w = video.videoWidth, hh = video.videoHeight; if (!w) return;
+      const c = document.createElement('canvas'); c.width = w; c.height = hh; c.getContext('2d').drawImage(video, 0, 0, w, hh);
+      c.toBlob(async (b) => { try { fin(await compressImage(new File([b], 'cam.jpg', { type: 'image/jpeg' }), 150)); } catch (e) { fin(undefined); } }, 'image/jpeg', 0.92);
+    } });
+    const ov = h('div', { class: 'cam' }, video, h('div', { class: 'cam-bar' }, h('button', { type: 'button', class: 'btn sec', onclick: () => fin(null) }, 'Batal'), shot, h('span', { style: { width: '72px' } })));
+    document.body.append(ov);
+    video.play().catch(() => {});
+  });
+}
 const fmt = (ms) => { try { return new Date(ms).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return String(ms); } };
 const nf = (v) => { const x = Math.round((+v || 0) * 100) / 100; return x.toLocaleString('id-ID'); };
 const UNITS = ['m', 'm²', 'm³', 'ha', 'unit', 'titik', 'pkk', 'kg', 'ton'];
@@ -143,8 +163,15 @@ export function openNoteEditor(base, note, done) {
   };
   drawPh();
   const total = () => st.photos.length + st.pp.length + st.added.length;
-  const pick = (cap) => {
+  const pick = async (cap) => {
     if (cap && !st.pos) { st.auto = true; startWatch(false); }   // kamera: ambil koordinat bersamaan dengan foto
+    if (cap) {
+      if (total() >= MAXPH) { toast('Maksimal ' + MAXPH + ' foto per catatan'); return; }
+      const d = await cameraShot();
+      if (d === null) return;
+      if (d) { st.added.push(d); drawPh(); return; }
+      // kamera dalam aplikasi tidak tersedia: pakai pengambil berkas sistem dengan atribut capture
+    }
     const inp = h('input', { type: 'file', accept: 'image/*', style: { display: 'none' } });
     if (cap) inp.setAttribute('capture', 'environment'); else inp.multiple = true;
     inp.addEventListener('change', async () => {
