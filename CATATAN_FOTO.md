@@ -37,5 +37,5 @@ Ketuk blok di peta → tab **Catatan** → **+ Catatan** → pilih kategori/sub 
 
 ## Tips
 - Nama penulis diambil dari nama akun. Agar nama Admin tampil (bukan potongan email), tambahkan email Admin sendiri lewat **Kelola akun → Tambah** dengan nama lengkap (akun yang sudah ada tidak diubah passwordnya).
-- Menghapus catatan menghapus foto-fotonya dari Drive (masuk Tempat Sampah Drive).
+- **Arsip foto:** foto di Drive tidak pernah dihapus oleh aplikasi, walau catatannya dihapus atau fotonya dibuang dari catatan. Nama berkas: `<kode>_<Blok>_<Kategori>_<SubKategori>.jpg` (contoh `nmwm4olekji53a_H32_Infrastruktur_Titipanen.jpg`).
 - Kuota Drive terpakai di akun pemilik script. Foto 150 KB ≈ 6.500 foto per 1 GB.

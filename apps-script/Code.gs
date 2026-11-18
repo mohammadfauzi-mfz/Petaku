@@ -19,7 +19,7 @@ function doPost(e) {
     if (req.a === 'put') {
       const mime = /^image\/(jpeg|png|webp)$/.test(req.mime || '') ? req.mime : 'image/jpeg';
       if (!req.data || req.data.length > MAX_B64) throw new Error('Foto kosong atau terlalu besar');
-      const blob = Utilities.newBlob(Utilities.base64Decode(req.data), mime, String(req.name || 'foto.jpg').replace(/[^\w.\-]/g, '_'));
+      const blob = Utilities.newBlob(Utilities.base64Decode(req.data), mime, String(req.name || 'foto.jpg').replace(/[^\w.\-]/g, '_').slice(0, 120));
       const file = folder_().createFile(blob);
       return out_({ ok: true, id: file.getId() });
     }
@@ -28,8 +28,8 @@ function doPost(e) {
       return out_({ ok: true, mime: f.getMimeType(), data: Utilities.base64Encode(f.getBlob().getBytes()) });
     }
     if (req.a === 'del') {
-      try { file_(req.id).setTrashed(true); } catch (err) { /* sudah tidak ada */ }
-      return out_({ ok: true });
+      // ARSIP: foto tidak pernah dihapus dari Drive, walau catatannya dihapus di aplikasi
+      return out_({ ok: true, kept: true });
     }
     throw new Error('Perintah tidak dikenal');
   } catch (err) {

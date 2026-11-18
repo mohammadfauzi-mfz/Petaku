@@ -45,7 +45,7 @@ export const noteKeyOf = (layer, feat) => {
 export const catsList = () => (N.cats && N.cats.length ? N.cats : DEF_CATS);
 export const scriptUrl = () => N.url || '';
 export const pendingIds = () => new Set(N.pend);
-export const pendingCount = () => N.pend.length + N.delq.length;
+export const pendingCount = () => N.pend.length;
 export const marksOn = () => N.marks !== false;
 export function setMarks(v) { N.marks = !!v; save(); emit(); }
 
@@ -108,6 +108,12 @@ export async function compressImage(file, maxKB) {
     return best;
   } finally { URL.revokeObjectURL(url); }
 }
+// nama berkas di Drive: <id>_<Blok>_<Kategori>_<SubKategori>[_n].jpg  (spasi/simbol dibuang)
+const clean = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '');
+function fileName(n) {
+  const k = (n.photos || []).length;
+  return [n.id, clean(n.blok), clean(n.cat), clean(n.sub)].filter(Boolean).join('_') + (k ? '_' + (k + 1) : '') + '.jpg';
+}
 const b64of = (dataUrl) => dataUrl.slice(dataUrl.indexOf(',') + 1);
 // foto -> data URL (dari cache HP, atau diunduh lewat Apps Script)
 const photoJobs = new Map();
@@ -138,16 +144,16 @@ export async function saveNote(n, newPhotos) {
 }
 export async function removeNote(n) {
   const note = N.notes[n.id]; if (!note) return;
-  for (const f of note.photos || []) if (!N.delq.includes(f)) N.delq.push(f);
+  // foto yang sudah terunggah TIDAK dihapus dari Google Drive (arsip); hanya foto yang belum terkirim dibuang dari HP
   for (const t of note.pp || []) await dbDel('nph:' + t).catch(() => {});
-  note.del = 1; note.updatedAt = Date.now(); note.text = ''; note.photos = []; note.pp = [];
+  note.del = 1; note.updatedAt = Date.now(); note.text = ''; note.pp = [];
   if (!N.pend.includes(note.id)) N.pend.push(note.id);
   await save(); emit(); flush().catch(() => {});
 }
 export async function removePhoto(n, ref) {
   const note = N.notes[n.id]; if (!note) return;
   if ((note.pp || []).includes(ref)) { note.pp = note.pp.filter((x) => x !== ref); await dbDel('nph:' + ref).catch(() => {}); }
-  else if ((note.photos || []).includes(ref)) { note.photos = note.photos.filter((x) => x !== ref); if (!N.delq.includes(ref)) N.delq.push(ref); }
+  else if ((note.photos || []).includes(ref)) { note.photos = note.photos.filter((x) => x !== ref); }   // berkas di Drive tetap disimpan
   note.updatedAt = Date.now(); if (!N.pend.includes(note.id)) N.pend.push(note.id);
   await save(); emit(); flush().catch(() => {});
 }
@@ -163,7 +169,7 @@ export function flush() {
       for (const t of [...(n.pp || [])]) {
         try {
           const d = await dbGet('nph:' + t); if (!d) { n.pp = n.pp.filter((x) => x !== t); continue; }
-          const j = await call({ a: 'put', name: id + '.jpg', mime: 'image/jpeg', data: b64of(d) });
+          const j = await call({ a: 'put', name: fileName(n), mime: 'image/jpeg', data: b64of(d) });
           n.photos = [...(n.photos || []), j.id]; n.pp = n.pp.filter((x) => x !== t);
           await dbSet('nph:' + j.id, d); await dbDel('nph:' + t);
           n.updatedAt = Date.now(); await save();
@@ -174,9 +180,7 @@ export function flush() {
         if (!(n.pp || []).length) N.pend = N.pend.filter((x) => x !== id);
       } catch (e) { err = err || e; }
     }
-    for (const f of [...N.delq]) {
-      try { await call({ a: 'del', id: f }); N.delq = N.delq.filter((x) => x !== f); await dbDel('nph:' + f).catch(() => {}); } catch (e) { err = err || e; break; }
-    }
+    N.delq = [];   // arsip foto di Drive tidak pernah dihapus oleh aplikasi
     await save(); emit();
     return { ok: !err, err };
   })().finally(() => { flushing = null; });
