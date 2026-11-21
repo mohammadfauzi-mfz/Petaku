@@ -2,6 +2,7 @@
 import { S, theme, getField, fieldValue, getProp, computeStats, filterActive, filterSummary, ensureStyles, resolveStyle } from './model.js';
 import { h, num, select, toast, normKey } from './util.js';
 import { openSheet } from './ui-common.js';
+import { notesRecapCard } from './ui-notes.js';
 import { compareTables, recapTable, autoTo, recapGridTables, recapGrid, outlookSource } from './ui-tables.js';
 
 const fmt = (v) => { if (v == null || !isFinite(v)) return '–'; const a = Math.abs(v); return a >= 100 ? String(Math.round(v)) : a >= 10 ? String(Math.round(v * 10) / 10).replace('.', ',') : String(Math.round(v * 100) / 100).replace('.', ','); };
@@ -160,6 +161,8 @@ export function openSummary() {
         }
       }
     }
+
+    { const nc = notesRecapCard(); if (nc) body.append(nc); }
 
     const txt = textReport(t, items, numeric, groupBy, groups, lows, highs, topN, recapRows);
     body.append(h('div', { class: 'btns' },

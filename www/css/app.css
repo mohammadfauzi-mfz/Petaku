@@ -264,3 +264,5 @@ h4{margin:12px 0 4px;font-size:13px}
 .cam-bar{display:flex;align-items:center;justify-content:space-between;padding:14px 18px calc(14px + env(safe-area-inset-bottom,0px));background:#000}
 .cam-shot{width:72px;height:72px;border-radius:50%;border:5px solid #fff;background:#e53935;padding:0}
 .cam-shot:active{background:#b71c1c}
+.nt-row{cursor:pointer}
+.nt-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}

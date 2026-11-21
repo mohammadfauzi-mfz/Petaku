@@ -4,7 +4,7 @@ import { getProp } from './model.js';
 import { openSheet, confirmBox, row, textInput, textArea } from './ui-common.js';
 import { isAdmin } from './auth.js';
 import { openZoom } from './ui-zoom.js';
-import { notesOn, notesFor, noteKeyOf, onNotes, catsList, DEF_CATS, saveNote, removeNote, removePhoto, canEdit, newId, pendingIds, compressImage, photoSrc, syncNotes, pendingCount, scriptUrl, saveUrl, saveCats, marksOn, setMarks, hasCoord, setProgress, areaOptions, filterList, setFilter, pingServer, coordNotes } from './notes.js';
+import { notesOn, notesFor, noteKeyOf, onNotes, catsList, DEF_CATS, saveNote, removeNote, removePhoto, canEdit, newId, pendingIds, compressImage, photoSrc, syncNotes, pendingCount, scriptUrl, saveUrl, saveCats, marksOn, setMarks, hasCoord, setProgress, areaOptions, filterList, setFilter, pingServer, coordNotes, allNotes } from './notes.js';
 
 const MAXPH = 5;
 // kamera dalam aplikasi (getUserMedia): langsung membuka kamera belakang. Hasil: dataURL, null = dibatalkan, undefined = kamera tidak tersedia (pakai cara lain)
@@ -367,5 +367,54 @@ export function notesSettingsCard() {
     sv.onclick = async () => { sv.disabled = true; try { const v = url.value.trim(); if (v && !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(v)) throw new Error('Alamat harus berakhiran /exec dan berasal dari script.google.com'); await saveUrl(v); toast('Alamat server foto disimpan & tersinkron ke pengguna'); } catch (e) { toast(e.message || String(e), 4500); } sv.disabled = false; };
     card.append(h('div', { style: { marginTop: '10px' } }, h('b', {}, 'Server foto (Admin)'), h('div', { class: 'mut small' }, 'Alamat Web App Apps Script (Google Drive). Pengguna menerimanya otomatis saat sinkron.'), url, h('div', { class: 'btns', style: { marginTop: '6px' } }, sv, h('button', { class: 'btn sec sm', onclick: openCatEditor }, 'Kelola kategori'))));
   }
+  return card;
+}
+
+// ---------- rekap daftar catatan semua blok (dipakai di Ringkasan) ----------
+const RF = { st: 'all', cat: '', afd: '', sort: 'new', limit: 30 };
+export function notesRecapCard() {
+  if (!notesOn()) return null;
+  const card = h('div', { class: 'card' });
+  const draw = () => {
+    card.innerHTML = '';
+    const all = allNotes();
+    card.append(h('h3', {}, 'Catatan blok'));
+    if (!all.length) { card.append(h('div', { class: 'ic-none' }, 'Belum ada catatan. Sinkron catatan ada di tab Data.')); return; }
+    const afds = [...new Set(all.map((n) => n.afd || '(tanpa afdeling)'))].sort((a, b) => a.localeCompare(b, 'id', { numeric: true }));
+    const cats = [...new Set(all.map((n) => n.cat).filter(Boolean))].sort();
+    const open = all.filter((n) => n.status !== 'selesai').length;
+    card.append(h('div', { class: 'ic-badges', style: { margin: '4px 0 8px' } }, h('span', { class: 'bdg' }, all.length + ' catatan'), h('span', { class: 'bdg dark' }, open + ' terbuka'), h('span', { class: 'bdg' }, (all.length - open) + ' selesai')));
+    // rekap per afdeling
+    const rk = new Map();
+    for (const n of all) { const a = n.afd || '(tanpa afdeling)'; const r = rk.get(a) || { a, t: 0, o: 0, v: 0, d: 0 }; r.t++; if (n.status !== 'selesai') r.o++; if (n.vol > 0) { r.v += n.vol; r.d += Math.min(n.done, n.vol); } rk.set(a, r); }
+    const tb = h('table', { class: 'sumtab' }, h('thead', {}, h('tr', {}, ['Afdeling', 'Catatan', 'Terbuka', 'Progres vol.'].map((x) => h('th', {}, x)))));
+    const tbd = h('tbody', {});
+    for (const r of [...rk.values()].sort((x, y) => x.a.localeCompare(y.a, 'id', { numeric: true }))) tbd.append(h('tr', {}, h('td', {}, r.a), h('td', {}, String(r.t)), h('td', {}, String(r.o)), h('td', {}, r.v > 0 ? Math.round(r.d / r.v * 100) + '%' : '–')));
+    tb.append(tbd); card.append(h('div', { class: 'tblwrap' }, tb));
+    // filter
+    const mk = (label, opts, val, set) => row(label, select(opts, val, (v) => { set(v); RF.limit = 30; draw(); }));
+    card.append(
+      mk('Status', [['all', 'Semua'], ['buka', 'Terbuka'], ['selesai', 'Selesai']], RF.st, (v) => { RF.st = v; }),
+      mk('Kategori', [['', 'Semua']].concat(cats.map((c) => [c, c])), RF.cat, (v) => { RF.cat = v; }),
+      mk('Afdeling', [['', 'Semua']].concat(afds.map((a) => [a, a])), RF.afd, (v) => { RF.afd = v; }),
+      mk('Urutkan', [['new', 'Terbaru'], ['blok', 'Afdeling › Blok'], ['prog', 'Progres terendah']], RF.sort, (v) => { RF.sort = v; }));
+    let list = all.filter((n) => (RF.st === 'all' || (RF.st === 'selesai') === (n.status === 'selesai')) && (!RF.cat || n.cat === RF.cat) && (!RF.afd || (n.afd || '(tanpa afdeling)') === RF.afd));
+    const pg = (n) => (n.vol > 0 ? n.done / n.vol : 2);
+    if (RF.sort === 'blok') list.sort((a, b) => String(a.afd).localeCompare(String(b.afd), 'id', { numeric: true }) || String(a.blok).localeCompare(String(b.blok), 'id', { numeric: true }) || b.at - a.at);
+    else if (RF.sort === 'prog') list.sort((a, b) => pg(a) - pg(b) || b.at - a.at);
+    else list.sort((a, b) => b.at - a.at);
+    card.append(h('div', { class: 'mut small', style: { margin: '6px 0' } }, `${list.length} catatan ditampilkan. Ketuk untuk detail.`));
+    for (const n of list.slice(0, RF.limit)) {
+      const it = h('div', { class: 'nt-i nt-row' + (n.status === 'selesai' ? ' done' : ''), onclick: () => openNoteDetail(n) },
+        h('div', { class: 'nt-top' }, h('b', {}, `${n.blok}${n.afd ? ' · ' + n.afd : ''}`), h('span', { class: 'bdg' }, n.cat + (n.sub ? ' › ' + n.sub : '')),
+          h('span', { class: 'bdg ' + (n.status === 'selesai' ? '' : 'dark') }, n.status === 'selesai' ? '✔ Selesai' : '● Terbuka'), hasCoord(n) ? h('span', { class: 'bdg' }, '📍') : null, (n.photos || []).length ? h('span', { class: 'bdg' }, '📷 ' + n.photos.length) : null));
+      if (n.text) it.append(h('div', { class: 'nt-tx nt-clamp' }, n.text));
+      if (n.vol > 0) it.append(bar(n));
+      it.append(h('div', { class: 'nt-ft' }, `${n.name || n.by} · ${fmt(n.at)}`));
+      card.append(it);
+    }
+    if (list.length > RF.limit) card.append(h('div', { class: 'btns' }, h('button', { class: 'btn sec sm', onclick: () => { RF.limit += 30; draw(); } }, `Tampilkan lebih banyak (${list.length - RF.limit})`)));
+  };
+  draw();
   return card;
 }

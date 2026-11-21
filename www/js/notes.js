@@ -36,6 +36,7 @@ export const coordNotes = () => coordList;
 // penanda di tengah blok hanya untuk catatan tanpa koordinat; yang berkoordinat digambar di titiknya
 const plain = (key) => notesFor(key).filter((n) => !hasCoord(n));
 export const hasNotes = (key) => plain(key).length > 0;
+export const allNotes = () => { const a = []; for (const l of byKey.values()) a.push(...l); return a; };
 export const notesFor = (key) => byKey.get(key) || [];
 export const openCount = (key) => plain(key).filter((n) => n.status !== 'selesai').length;
 export const noteKeyOf = (layer, feat) => {
