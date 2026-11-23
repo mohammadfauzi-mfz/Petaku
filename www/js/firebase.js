@@ -64,7 +64,7 @@ async function rawGet(path, retry) {
 }
 async function rawPut(path, fields) {
   const r = await fetch(`${DOCS()}/${path}`, { method: 'PATCH', headers: { Authorization: 'Bearer ' + await token(), 'Content-Type': 'application/json' }, body: JSON.stringify({ fields }) });
-  if (r.status === 403) throw new Error('Hanya Admin yang boleh mengirim data (ditolak oleh aturan Firestore).');
+  if (r.status === 403) throw new Error('Hanya Admin atau Superuser (PIC) yang boleh mengirim data (ditolak oleh aturan Firestore). Pastikan aturan Firestore terbaru sudah dipasang.');
   if (!r.ok) throw new Error('Firestore ' + r.status);
 }
 
@@ -73,8 +73,9 @@ export async function fbLoadRole() {
   const d = await rawGet('config/roles').catch(() => null);
   const vals = d && d.fields && d.fields.admins && d.fields.admins.arrayValue && d.fields.admins.arrayValue.values || [];
   const admins = vals.map((v) => String(v.stringValue || '').toLowerCase());
-  ses.role = admins.includes(ses.email) ? 'admin' : 'user';
   const md = await rawGet('members/' + encodeURIComponent(ses.email)).catch(() => null);
+  const mrole = md && md.fields && md.fields.role && md.fields.role.stringValue;
+  ses.role = admins.includes(ses.email) ? 'admin' : (mrole === 'superuser' ? 'superuser' : 'user');
   ses.member = ses.role === 'admin' || !!md;
   const nm = d && d.fields && d.fields.names && d.fields.names.mapValue && d.fields.names.mapValue.fields;
   ses.name = (nm && nm[ses.email] && nm[ses.email].stringValue) || (md && md.fields && md.fields.name && md.fields.name.stringValue) || '';
@@ -117,7 +118,7 @@ export async function fbPutText(p, text) {
 const memId = (email) => encodeURIComponent(String(email).trim().toLowerCase());
 const MSG2 = { EMAIL_EXISTS: 'EMAIL_EXISTS', WEAK_PASSWORD: 'Password terlalu lemah (minimal 6 karakter)', OPERATION_NOT_ALLOWED: 'Pendaftaran akun dimatikan di Firebase. Aktifkan: Authentication → Settings → User actions → Enable create (sign-up)', MISSING_EMAIL: 'Isi email' };
 // buat akun login (bila belum ada) lalu daftarkan sebagai anggota; hasil: 'baru' | 'sudah ada'
-export async function fbAddUser(email, password, name) {
+export async function fbAddUser(email, password, name, role) {
   email = String(email).trim().toLowerCase();
   let status = 'baru';
   try { await post(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${KEY()}`, { email, password, returnSecureToken: false }); }
@@ -127,13 +128,19 @@ export async function fbAddUser(email, password, name) {
     else if (e.offline) throw e;
     else throw new Error(MSG2[c] || e.message);
   }
-  await rawPut('members/' + memId(email), { name: { stringValue: String(name || '') }, addedAt: { integerValue: String(Date.now()) } });
+  await rawPut('members/' + memId(email), { name: { stringValue: String(name || '') }, role: { stringValue: role === 'superuser' ? 'superuser' : 'user' }, addedAt: { integerValue: String(Date.now()) } });
   return status;
 }
 export async function fbListMembers() {
   const d = await rawGet('members?pageSize=300'); const out = [];
-  for (const x of (d && d.documents) || []) out.push({ email: decodeURIComponent(x.name.split('/').pop()), name: (x.fields && x.fields.name && x.fields.name.stringValue) || '' });
+  for (const x of (d && d.documents) || []) out.push({ email: decodeURIComponent(x.name.split('/').pop()), name: (x.fields && x.fields.name && x.fields.name.stringValue) || '', role: (x.fields && x.fields.role && x.fields.role.stringValue) || 'user' });
   return out.sort((a, b) => a.email.localeCompare(b.email));
+}
+export async function fbSetMemberRole(email, role) {
+  const d = await rawGet('members/' + memId(email));
+  const f = (d && d.fields) || {};
+  f.role = { stringValue: role === 'superuser' ? 'superuser' : 'user' };
+  await rawPut('members/' + memId(email), f);
 }
 export async function fbRemoveMember(email) {
   const r = await fetch(`${DOCS()}/members/${memId(email)}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + await token() } });

@@ -5,7 +5,7 @@ import { openSheet, confirmBox, row, textInput, numInput, colorInput, check, tog
 import { zoomToBBox } from './ui-map.js';
 import { showPage } from './app.js';
 import { packable, shareLayerPack, importLayerPack } from './layerpack.js';
-import { isAdmin } from './auth.js';
+import { canPublish as isAdmin } from './auth.js';
 
 function kindOf(l) { const k = l._kind; return k === 'poly' ? 'poligon' : k === 'line' ? 'garis' : k === 'point' ? 'titik' : '…'; }
 

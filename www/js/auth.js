@@ -3,8 +3,8 @@
 import { h, $, toast, select, dbGet, dbSet, dbDel, bytesToBase64, base64ToBytes } from './util.js';
 import { openSheet, confirmBox, textInput, row, eyeWrap } from './ui-common.js';
 import { remoteText, pushText } from './sync.js';
-import { ptList, ptReady, ptMode, activePT, setPT } from './pt.js';
-import { fbOn, fbRestore, fbSignIn, fbSignOut, fbRefresh, fbLoadRole, fbSession, fbAddUser, fbListMembers, fbRemoveMember, fbResetPassword } from './firebase.js';
+import { ptList, ptReady, ptMode, activePT, setPT, refreshPtList } from './pt.js';
+import { fbSetMemberRole, fbOn, fbRestore, fbSignIn, fbSignOut, fbRefresh, fbLoadRole, fbSession, fbAddUser, fbListMembers, fbRemoveMember, fbResetPassword } from './firebase.js';
 
 const ITER = 150000;
 const te = new TextEncoder();
@@ -15,7 +15,10 @@ let DB = { v: 1, users: [], updatedAt: 0, dirty: false };
 let me = null;
 export const currentUser = () => me;
 export const isAdmin = () => !!me && me.role === 'admin';
-export const roleLabel = (r) => (r === 'admin' ? 'Admin' : 'User');
+export const isSuper = () => !!me && me.role === 'superuser';
+// boleh mengirim/menimpa data, tema, dan layer ke server (Admin atau Superuser/PIC)
+export const canPublish = () => isAdmin() || isSuper();
+export const roleLabel = (r) => (r === 'admin' ? 'Admin' : r === 'superuser' ? 'Superuser (PIC)' : 'User');
 
 async function pbkdf2(pw, salt, iter) {
   const k = await crypto.subtle.importKey('raw', te.encode(pw), 'PBKDF2', false, ['deriveBits']);
@@ -84,9 +87,11 @@ export function ptSwitchCard() {
     if (!(await confirmBox(`Ganti ke ${t.nama || t.id}? Aplikasi dimuat ulang. Data ${cur.id} tetap tersimpan di HP ini, dan login ${cur.id} tidak terhapus.`, 'Ganti'))) return;
     setPT(t.id); location.reload();
   };
+  const refBtn = h('button', { class: 'btn sec' }, 'Perbarui daftar PT');
+  refBtn.onclick = async () => { refBtn.disabled = true; const ch = await refreshPtList(6000); refBtn.disabled = false; toast(ch ? 'Daftar PT diperbarui. Buka ulang Pengaturan.' : 'Daftar PT sudah yang terbaru (atau tidak ada internet)', 3500); };
   return h('div', { class: 'card' }, h('h3', {}, 'PT aktif'), h('div', { style: { fontWeight: '700', margin: '2px 0 8px' } }, cur.nama || cur.id),
     h('div', { class: 'mut small' }, 'Tiap PT punya server, data, dan login sendiri. Berpindah PT tidak menghapus data PT sebelumnya.'),
-    h('div', { style: { margin: '8px 0' } }, sel), h('div', { class: 'btns' }, go));
+    h('div', { style: { margin: '8px 0' } }, sel), h('div', { class: 'btns' }, go, refBtn));
 }
 function ptBlocked() {
   return new Promise(() => {
@@ -308,22 +313,24 @@ async function openFbAccounts() {
     list.innerHTML = '';
     if (!ms.length) list.append(h('div', { class: 'mut small' }, 'Belum ada pengguna terdaftar (Admin tidak perlu didaftarkan).'));
     for (const m of ms) list.append(h('div', { class: 'cellrow', style: { alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
-      h('div', { style: { flex: 1, minWidth: '160px', wordBreak: 'break-all' } }, h('b', {}, m.name || m.email), m.name ? h('div', { class: 'mut small' }, m.email) : null),
+      h('div', { style: { flex: 1, minWidth: '160px', wordBreak: 'break-all' } }, h('b', {}, m.name || m.email), h('div', { class: 'mut small' }, (m.name ? m.email + ' · ' : '') + roleLabel(m.role))),
+      h('button', { class: 'btn sec sm', onclick: async () => { const to = m.role === 'superuser' ? 'user' : 'superuser'; if (!await confirmBox(to === 'superuser' ? `Jadikan ${m.email} Superuser (PIC)? Ia bisa mengirim data, tema, dan layer PT ini.` : `Kembalikan ${m.email} menjadi User biasa?`, 'Ya')) return; try { await fbSetMemberRole(m.email, to); toast('Peran diubah'); draw(); } catch (e) { toast(e.message, 4000); } } }, m.role === 'superuser' ? 'Jadi User' : 'Jadi PIC'),
       h('button', { class: 'btn sec sm', onclick: async () => { try { await fbResetPassword(m.email); toast('Email reset password dikirim ke ' + m.email, 3500); } catch (e) { toast(e.message, 4000); } } }, 'Reset password'),
       h('button', { class: 'btn sec sm danger', onclick: async () => { if (!await confirmBox(`Cabut akses ${m.email}? Akun login tetap ada di Firebase, tapi tidak bisa membaca data lagi.`, 'Cabut')) return; try { await fbRemoveMember(m.email); toast('Akses dicabut'); draw(); } catch (e) { toast(e.message, 4000); } } }, 'Cabut')));
   };
   const em = textInput('', () => {}, { placeholder: 'Email pengguna', autocapitalize: 'none', type: 'email' });
   const nm = textInput('', () => {}, { placeholder: 'Nama (opsional)' });
   const pw = eyeWrap(h('input', { type: 'password', placeholder: 'Password awal (min. 6 karakter)', autocomplete: 'new-password' }));
+  const roleSel = select([['user', 'User (hanya membaca)'], ['superuser', 'Superuser / PIC (boleh kirim data & tema)']], 'user', null);
   const add = h('button', { class: 'btn', onclick: async () => {
     const e = em.value.trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(e)) return toast('Format email tidak valid');
     if (pw.value.length < 6) return toast('Password minimal 6 karakter');
     add.disabled = true;
-    try { const st = await fbAddUser(e, pw.value, nm.value); toast(st === 'baru' ? 'Akun dibuat dan didaftarkan' : 'Akun sudah ada, hanya didaftarkan (password lama tetap)', 3500); em.value = ''; nm.value = ''; pw.value = ''; draw(); }
+    try { const st = await fbAddUser(e, pw.value, nm.value, roleSel.value); toast(st === 'baru' ? 'Akun dibuat dan didaftarkan' : 'Akun sudah ada, hanya didaftarkan (password lama tetap)', 3500); em.value = ''; nm.value = ''; pw.value = ''; draw(); }
     catch (er) { toast(er.message, 5000); } finally { add.disabled = false; }
   } }, '+ Tambah pengguna');
-  body.append(h('div', { class: 'mut small' }, 'Pengguna biasa hanya bisa membaca data. Berikan email dan password awal kepada yang bersangkutan.'), em, nm, pw, add, h('h4', {}, 'Pengguna terdaftar'), list);
+  body.append(h('div', { class: 'mut small' }, 'User hanya membaca data. Superuser (PIC) = penanggung jawab data PT ini: boleh mengirim data, tema, dan layer, tetapi tidak bisa mengelola akun. Berikan email dan password awal kepada yang bersangkutan.'), em, nm, pw, roleSel, add, h('h4', {}, 'Pengguna terdaftar'), list);
   close = openSheet('Kelola akun', body);
   draw();
 }

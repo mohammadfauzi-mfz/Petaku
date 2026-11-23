@@ -1,5 +1,5 @@
 import { notesDataCard } from './ui-notes.js';
-import { isAdmin } from './auth.js';
+import { canPublish as isAdmin } from './auth.js';
 import { S, afdKeyCol, afdRow, detectGroupCol, bump, buildDs, indexDs, autoKeyCol, computeStats, theme, loadLayer, putDataset, removeDataset, dsForTheme } from './model.js';
 import { parseCSV } from './geo.js';
 import { h, $, toast, pickFile, readText, select, uid, shareFile, shareFiles } from './util.js';

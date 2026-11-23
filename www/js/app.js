@@ -13,8 +13,9 @@ import { checkRemote } from './sync.js';
 import { checkUpdate, BUILD } from './update.js';
 import { petaku } from './native.js';
 import { base64ToBytes, applyUiMode } from './util.js';
-import { requireLogin, backgroundCheck, isAdmin } from './auth.js';
+import { requireLogin, backgroundCheck, canPublish } from './auth.js';
 import { fbOn } from './firebase.js';
+import { refreshPtList } from './pt.js';
 import { pull } from './sync.js';
 import { PRESETS } from './ui-tables.js';
 import { importLayerPack } from './layerpack.js';
@@ -89,8 +90,10 @@ async function startupChecks() {
 }
 
 async function boot() {
+  const ptp = refreshPtList(3000);   // daftar PT online (pt-list.json), jalan bersamaan dengan init
   await init();
   await initNotes();
+  await ptp;
   await requireLogin();
   // tema lama belum punya tabel info: isi tabel bawaan (aman, tabel tanpa data otomatis tersembunyi)
   for (const t of S.themes) if (t.tables === undefined) t.tables = [PRESETS.lsu(), PRESETS.plan26(), PRESETS.yoy()];
@@ -130,7 +133,7 @@ async function boot() {
   setTimeout(startupChecks, 2500);
   setTimeout(backgroundCheck, 4000);
   // Firebase: pengguna biasa otomatis menarik data terbaru bila ada internet (Admin tidak, agar datanya tidak tertimpa)
-  if (fbOn() && !isAdmin()) setTimeout(async () => {
+  if (fbOn() && !canPublish()) setTimeout(async () => {
     if (!navigator.onLine) return;
     try {
       const r = await checkRemote();

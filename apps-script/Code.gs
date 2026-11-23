@@ -5,13 +5,24 @@
 // ISI DAFTAR PT (nilai apiKey & projectId sama dengan fbconfig.js di aplikasi).
 // Foto tiap PT masuk ke folder terpisah: Petaku Foto/<id PT>/
 // PT pertama juga boleh membaca foto lama yang ada langsung di folder "Petaku Foto" (sebelum multi-PT).
-// Menambah PT baru: tambahkan satu baris, lalu Deploy -> Kelola deployment -> Versi baru.
+// PT lain (BAS, DIL, dst.) otomatis dibaca dari pt-list.json di GitHub: tidak perlu mengubah script ini lagi.
 const PTS = {
   BPN: { apiKey: 'ISI_API_KEY_BPN', projectId: 'ISI_PROJECT_ID_BPN' },
-  BAS: { apiKey: 'ISI_API_KEY_BAS', projectId: 'ISI_PROJECT_ID_BAS' },
-  DIL: { apiKey: 'ISI_API_KEY_DIL', projectId: 'ISI_PROJECT_ID_DIL' },
 };
 const FIRST_PT = 'BPN';
+// PT yang tidak tertulis di daftar PTS di atas dibaca dari pt-list.json di repo GitHub (sama dengan daftar di aplikasi)
+const PT_LIST_URL = 'https://raw.githubusercontent.com/mohammadfauzi-mfz/Petaku/main/pt-list.json';
+function ptCfg_(pt) {
+  if (PTS[pt]) return PTS[pt];
+  const cache = CacheService.getScriptCache(); let raw = cache.get('ptlist');
+  if (!raw) {
+    const r = UrlFetchApp.fetch(PT_LIST_URL + '?_=' + Date.now(), { muteHttpExceptions: true });
+    if (r.getResponseCode() === 200) { raw = r.getContentText(); cache.put('ptlist', raw, 600); }
+  }
+  let arr = []; try { const j = JSON.parse(raw || '[]'); arr = Array.isArray(j) ? j : (j.pts || []); } catch (e) { /* abaikan */ }
+  for (let i = 0; i < arr.length; i++) if (String(arr[i].id).toUpperCase() === String(pt).toUpperCase() && arr[i].apiKey && arr[i].projectId) return { apiKey: arr[i].apiKey, projectId: arr[i].projectId };
+  throw new Error('PT tidak dikenal: ' + pt);
+}
 const FOLDER_NAME = 'Petaku Foto';
 const MAX_B64 = 400000; // batas ukuran foto (karakter base64) ~ 300 KB
 
@@ -21,7 +32,7 @@ function doPost(e) {
   try {
     const req = JSON.parse(e.postData.contents);
     const pt = String(req.pt || FIRST_PT);          // aplikasi lama (tanpa PT) dianggap PT pertama
-    if (!PTS[pt]) throw new Error('PT tidak dikenal: ' + pt);
+    ptCfg_(pt);
     verify_(req.token, pt);
     if (req.a === 'ping') return out_({ ok: true });
     if (req.a === 'put') {
@@ -79,7 +90,7 @@ function file_(id, pt) {
 
 // memeriksa token login Firebase, lalu memastikan akunnya Admin atau anggota terdaftar
 function verify_(token, pt) {
-  const cfg = PTS[pt];
+  const cfg = ptCfg_(pt);
   if (!token) throw new Error('Belum login');
   const cache = CacheService.getScriptCache();
   const ck = 'v' + pt + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, token));

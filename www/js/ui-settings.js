@@ -4,7 +4,7 @@ import { openSheet, row, textInput, check, eyeWrap } from './ui-common.js';
 import { push, pull, checkRemote, checkConfig } from './sync.js';
 import { checkUpdate, installUpdate, BUILD } from './update.js';
 import { petaku } from './native.js';
-import { isAdmin, accountCard } from './auth.js';
+import { canPublish as isAdmin, accountCard } from './auth.js';
 import { fbOn } from './firebase.js';
 import { notesSettingsCard } from './ui-notes.js';
 import { ptSwitchCard } from './auth.js';

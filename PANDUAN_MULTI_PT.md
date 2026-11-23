@@ -12,15 +12,29 @@ Foto semua PT memakai **satu Apps Script**, disimpan di Google Drive: `Petaku Fo
 6. **Firestore -> Start collection** `config` -> Document ID `roles` -> field `admins` (tipe **array**) -> isi item string: email admin tadi.
 7. **Project settings (ikon roda) -> General -> Your apps -> Web (</>)** -> daftarkan app -> salin `apiKey` dan `projectId`.
 
-## B. Mendaftarkan PT di aplikasi
-Edit di GitHub: `www/js/fbconfig.js`, isi `apiKey` dan `projectId` pada baris PT tersebut, lalu Commit. Build otomatis jalan, rilis baru muncul. Menambah PT baru = tambah satu baris `{ id:'XXX', nama:'PT. XXX', apiKey:'...', projectId:'...' }`.
-Catatan: PT pertama (BPN) jangan dipindah urutannya (data lama di HP tetap milik BPN).
+## B. Mendaftarkan PT di aplikasi (tanpa APK baru)
+Edit file `pt-list.json` di root repo GitHub (ikon pensil -> Commit). Contoh:
+```
+{ "pts": [
+  { "id": "BAS", "nama": "PT. BAS", "apiKey": "AIza...", "projectId": "petaku-bas" },
+  { "id": "DIL", "nama": "PT. DIL", "apiKey": "", "projectId": "" }
+] }
+```
+- `id` 2-8 huruf/angka (dipakai untuk nama folder foto dan database lokal). `apiKey` dan `projectId` kosong = tampil "belum disiapkan".
+- Aplikasi membaca daftar ini saat dibuka (butuh internet, hasilnya disimpan di HP) dan lewat tombol Pengaturan -> PT aktif -> **Perbarui daftar PT**.
+- Mengubah file ini **tidak memicu build**. Yang berhak mengubah = pemilik/kolaborator repo.
+- BPN tetap bawaan APK (jangan dihapus dari `fbconfig.js`).
 
 ## C. Apps Script foto (satu untuk semua PT)
-1. Buka Apps Script yang sudah ada -> ganti seluruh isi dengan file `Code.gs` terbaru.
-2. Isi baris `BAS` dan `DIL` pada daftar `PTS` (apiKey + projectId, sama dengan fbconfig.js). Baris BPN sudah terisi.
-3. **Deploy -> Kelola deployment -> ikon pensil -> Versi: Versi baru -> Deploy**. (URL tetap sama.)
-4. URL web-app dimasukkan admin tiap PT di Pengaturan -> Catatan & foto (sekali per PT, tersinkron ke anggota).
+1. Tempel `Code.gs` terbaru (isi apiKey/projectId BPN sudah ada) -> **Deploy -> Kelola deployment -> Versi baru**.
+2. PT lain **otomatis** dibaca script dari `pt-list.json` (cache 10 menit). Tidak perlu edit script lagi untuk PT baru.
+3. URL web-app dimasukkan admin tiap PT di Pengaturan -> Catatan & foto (sekali per PT).
+
+## C2. Peran
+- **Admin**: email di `config/roles` (diatur manual di Firebase). Kelola akun, kategori, URL foto, kirim data.
+- **Superuser (PIC)**: PIC tiap PT. Dibuat Admin di Pengaturan -> Kelola akun (pilih "Superuser / PIC" saat tambah pengguna, atau tombol **Jadi PIC** pada pengguna yang ada). PIC boleh **mengirim data CSV, tema, dan layer**, tetapi tidak bisa mengelola akun/kategori.
+- **User**: hanya membaca. 
+- Setelah rules baru dipasang (file `firestore.rules`), PIC bisa kirim data. Dokumen `members/<email>` memuat field `role`.
 
 ## D. Memakai di aplikasi
 - Pilihan PT muncul di layar login dan di Pengaturan -> **Ganti PT** (untuk staf lintas PT; login tiap PT tersimpan).

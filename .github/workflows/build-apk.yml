@@ -5,6 +5,7 @@ on:
     branches: [main, master]
     paths-ignore:
       - 'sync/**'      # data sinkron dari aplikasi tidak memicu build
+      - 'pt-list.json' # daftar PT online dibaca aplikasi langsung dari GitHub, tidak perlu build
       - '**.md'
   workflow_dispatch:
 

@@ -6,13 +6,18 @@ service cloud.firestore {
       return signedIn() && request.auth.token.email in
         get(/databases/$(database)/documents/config/roles).data.admins;
     }
+    // Superuser (PIC PT): anggota yang field "role"-nya = 'superuser' (diatur Admin lewat Kelola akun di aplikasi)
+    function isPic() {
+      return signedIn() && exists(/databases/$(database)/documents/members/$(request.auth.token.email))
+        && get(/databases/$(database)/documents/members/$(request.auth.token.email)).data.get('role', 'user') == 'superuser';
+    }
     function isMember() {
       return isAdmin() || (signedIn() && exists(/databases/$(database)/documents/members/$(request.auth.token.email)));
     }
-    // data sinkron: hanya anggota yang boleh baca, hanya Admin yang boleh tulis
+    // data sinkron: anggota membaca; Admin dan Superuser (PIC) boleh menulis (data CSV, tema, layer)
     match /sync/{doc} {
       allow read: if isMember();
-      allow write: if isAdmin();
+      allow write: if isAdmin() || isPic();
     }
     // daftar Admin: diatur manual lewat konsol
     match /config/roles {
