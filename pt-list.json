@@ -1,6 +1,6 @@
 {
   "pts": [
     { "id": "BAS", "nama": "PT. Bima Agri Sawit", "apiKey": "AIzaSyD3NQDuC9cTZ-etWv02uOk2YT1lSiTGN1A", "projectId": "petaku-bas" },
-    { "id": "DIL", "nama": "PT. Dharma Intisawit Lestari", "apiKey": "", "projectId": "" }
+    { "id": "DIL", "nama": "PT. Dharma Intisawit Lestari", "apiKey": "AIzaSyCVWmNIHtv7a6jpEWme2nhXjOcvGPf1gWM", "projectId": "petaku-dil" }
   ]
 }
