@@ -61,13 +61,14 @@ export function num(s) {
 export const normKey = (v) => String(v == null ? '' : v).trim().toUpperCase().replace(/\s+/g, '');
 
 // ---------- penyimpanan ----------
+import { dbName } from './pt.js';
 const mem = new Map();
 let dbp;
 function openDB() {
   if (!dbp) {
     dbp = new Promise((res, rej) => {
       try {
-        const r = indexedDB.open('petasbi', 1);
+        const r = indexedDB.open(dbName(), 1);
         r.onupgradeneeded = () => r.result.createObjectStore('kv');
         r.onsuccess = () => res(r.result);
         r.onerror = () => rej(r.error);

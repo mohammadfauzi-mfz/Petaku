@@ -3,6 +3,7 @@ import { dbGet, dbSet, dbDel } from './util.js';
 import { normKey } from './util.js';
 import { getProp, afdKey, S } from './model.js';
 import { petaku } from './native.js';
+import { activePT } from './pt.js';
 import { fbOn, fbSession, fbDocGet, fbDocSet, fbQueryNotes, fbToken } from './firebase.js';
 
 export const DEF_CATS = [
@@ -77,7 +78,7 @@ function fromDoc(d) {
 // ---- Apps Script (foto di Google Drive) ----
 async function call(payload) {
   if (!N.url) throw new Error('Alamat Apps Script belum diisi Admin');
-  const body = JSON.stringify({ token: await fbToken(), ...payload });
+  const body = JSON.stringify({ token: await fbToken(), pt: activePT().id, ...payload });
   let text;
   const pk = petaku();
   try {

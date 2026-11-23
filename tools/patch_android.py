@@ -14,7 +14,7 @@ mf = os.path.join(base, 'AndroidManifest.xml')
 x = open(mf, encoding='utf-8').read()
 MIMES = ['text/csv', 'text/comma-separated-values', 'text/tab-separated-values', 'application/csv', 'text/plain',
          'application/vnd.ms-excel', 'application/octet-stream', 'application/json', 'application/geo+json',
-         'application/vnd.google-earth.kml+xml']
+         'application/vnd.google-earth.kml+xml', 'application/zip', 'application/x-zip-compressed', 'multipart/x-zip']
 mime_xml = '\n'.join(f'                <data android:mimeType="{m}" />' for m in MIMES)
 filters = f'''
             <intent-filter>

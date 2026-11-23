@@ -3,6 +3,7 @@
 import { h, $, toast, select, dbGet, dbSet, dbDel, bytesToBase64, base64ToBytes } from './util.js';
 import { openSheet, confirmBox, textInput, row, eyeWrap } from './ui-common.js';
 import { remoteText, pushText } from './sync.js';
+import { ptList, ptReady, ptMode, activePT, setPT } from './pt.js';
 import { fbOn, fbRestore, fbSignIn, fbSignOut, fbRefresh, fbLoadRole, fbSession, fbAddUser, fbListMembers, fbRemoveMember, fbResetPassword } from './firebase.js';
 
 const ITER = 150000;
@@ -65,7 +66,38 @@ export async function backgroundCheck() {
 }
 
 // ---- layar login ----
+const ptLabel = (p) => (p.nama || p.id) + (ptReady(p) ? '' : ' (belum disiapkan)');
+// menu pilih PT di layar login: ganti PT = muat ulang aplikasi dengan database & server PT itu
+function ptPicker() {
+  if (ptList().length < 2) return null;
+  const sel = select(ptList().map((p) => [p.id, ptLabel(p)]), activePT().id, (v) => { setPT(v); location.reload(); });
+  return h('div', { class: 'ptpick' }, h('label', {}, 'PT'), sel);
+}
+export function ptSwitchCard() {
+  if (ptList().length < 2 || !ptMode()) return null;
+  const cur = activePT();
+  const sel = select(ptList().map((p) => [p.id, ptLabel(p)]), cur.id, null);
+  const go = h('button', { class: 'btn' }, 'Ganti PT');
+  go.onclick = async () => {
+    const t = ptList().find((p) => p.id === sel.value);
+    if (!t || t.id === cur.id) { toast('PT yang dipilih sama dengan PT aktif'); return; }
+    if (!(await confirmBox(`Ganti ke ${t.nama || t.id}? Aplikasi dimuat ulang. Data ${cur.id} tetap tersimpan di HP ini, dan login ${cur.id} tidak terhapus.`, 'Ganti'))) return;
+    setPT(t.id); location.reload();
+  };
+  return h('div', { class: 'card' }, h('h3', {}, 'PT aktif'), h('div', { style: { fontWeight: '700', margin: '2px 0 8px' } }, cur.nama || cur.id),
+    h('div', { class: 'mut small' }, 'Tiap PT punya server, data, dan login sendiri. Berpindah PT tidak menghapus data PT sebelumnya.'),
+    h('div', { style: { margin: '8px 0' } }, sel), h('div', { class: 'btns' }, go));
+}
+function ptBlocked() {
+  return new Promise(() => {
+    const wrap = h('div', { id: 'loginWrap' }); document.body.append(wrap);
+    const box = h('div', { class: 'loginbox' }, h('div', { class: 'logo' }, '🗺'), h('h2', {}, 'Petaku'), ptPicker(),
+      h('div', { class: 'loginmsg' }, `${activePT().nama || activePT().id} belum disiapkan. Hubungi Admin, atau pilih PT lain.`));
+    wrap.append(box);
+  });
+}
 export async function requireLogin() {
+  if (ptMode() && !ptReady(activePT())) { await ptBlocked(); return; }
   if (fbOn()) {
     const s = await fbRestore();
     if (s) { me = { u: s.email, name: s.name || s.email, role: s.role || 'user' }; return; }
@@ -87,7 +119,7 @@ function fbLoginScreen() {
     const draw = () => {
       wrap.innerHTML = '';
       const box = h('div', { class: 'loginbox' });
-      box.append(h('div', { class: 'logo' }, '🗺'), h('h2', {}, 'Petaku'));
+      box.append(h('div', { class: 'logo' }, '🗺'), h('h2', {}, 'Petaku'), ptPicker());
       const em = textInput('', () => {}, { placeholder: 'Email', autocapitalize: 'none', autocomplete: 'username', type: 'email' });
       const pw = eyeWrap(h('input', { type: 'password', placeholder: 'Password', autocomplete: 'current-password' }));
       const err = h('div', { class: 'loginmsg' }, msg);

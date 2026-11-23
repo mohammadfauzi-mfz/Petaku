@@ -266,3 +266,6 @@ h4{margin:12px 0 4px;font-size:13px}
 .cam-shot:active{background:#b71c1c}
 .nt-row{cursor:pointer}
 .nt-clamp{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ptpick{display:flex;align-items:center;gap:8px;margin:6px 0 10px}
+.ptpick label{font-weight:700;min-width:28px}
+.ptpick select{flex:1}

@@ -1,5 +1,6 @@
 // Model data: state global, layer, tema (jenis peta), dataset CSV, resolusi warna
 import { num, normKey, uid, clone, dbGet, dbSet, dbDel } from './util.js';
+import { activePT, ptMode } from './pt.js';
 import * as G from './geo.js';
 
 export const VERSION = '1.0';
@@ -167,7 +168,7 @@ export async function saveNow() {
 
 export async function init() {
   const L = await dbGet('layers');
-  const dl = defLayers();
+  const dl = !ptMode() || activePT().petaBawaan ? defLayers() : [];
   if (Array.isArray(L) && L.length) {
     // gabungkan: layer bawaan baru yang belum ada ditambahkan di posisi default
     S.layers = L;

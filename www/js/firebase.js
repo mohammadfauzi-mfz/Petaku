@@ -1,8 +1,8 @@
 // Backend Firebase lewat REST (tanpa SDK): Authentication (email+sandi) dan Firestore (berkas teks dikompres + dipecah).
-import { FB } from './fbconfig.js';
+import { FB, ptReady, activePT } from './pt.js';
 import { dbGet, dbSet, dbDel, bytesToBase64, base64ToBytes } from './util.js';
 
-export const fbOn = () => !!(FB.apiKey && FB.projectId);
+export const fbOn = () => ptReady(activePT());
 const KEY = () => encodeURIComponent(FB.apiKey);
 const DOCS = () => `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(FB.projectId)}/databases/(default)/documents`;
 let ses = null;   // { email, refreshToken, idToken, exp, role, name }

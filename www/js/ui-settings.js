@@ -7,6 +7,7 @@ import { petaku } from './native.js';
 import { isAdmin, accountCard } from './auth.js';
 import { fbOn } from './firebase.js';
 import { notesSettingsCard } from './ui-notes.js';
+import { ptSwitchCard } from './auth.js';
 import { syncNotes } from './notes.js';
 
 const fmtTime = (ms) => { if (!ms) return '–'; try { return new Date(Number(ms)).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' }); } catch (e) { return String(ms); } };
@@ -63,6 +64,7 @@ export function openSettings() {
   sc.append(h('div', { class: 'btns' }, bPull, admin ? bPush : null, bCheck));
   sc.append(status);
   body.append(sc);
+  { const pc = ptSwitchCard(); if (pc) body.append(pc); }
   const nc = notesSettingsCard(); if (nc) body.append(nc);
   body.append(h('div', { class: 'card' }, h('h3', {}, 'Tampilan aplikasi'),
     row('Mode', select([['auto', 'Ikuti HP (otomatis)'], ['light', 'Terang'], ['dark', 'Gelap']], uiMode(), (v) => setUiMode(v))),

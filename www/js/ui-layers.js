@@ -4,6 +4,8 @@ import { h, $, toast, pickFile, readText, select, uid } from './util.js';
 import { openSheet, confirmBox, row, textInput, numInput, colorInput, check, toggle } from './ui-common.js';
 import { zoomToBBox } from './ui-map.js';
 import { showPage } from './app.js';
+import { packable, shareLayerPack, importLayerPack } from './layerpack.js';
+import { isAdmin } from './auth.js';
 
 function kindOf(l) { const k = l._kind; return k === 'poly' ? 'poligon' : k === 'line' ? 'garis' : k === 'point' ? 'titik' : '…'; }
 
@@ -74,6 +76,18 @@ async function editLayer(l) {
   const close = openSheet('Atur layer', body, { onClose: renderLayers });
 }
 
+function openPackShare() {
+  const list = packable();
+  if (!list.length) { toast('Belum ada layer impor yang bisa dikemas (peta bawaan aplikasi tidak ikut)', 4500); return; }
+  const sel = new Set(list.map((l) => l.id));
+  const body = h('div', {}, h('div', { class: 'mut small', style: { marginBottom: '6px' } }, 'Paket berisi peta dan pengaturan layer (tanpa CSV dan tema). Kirim lewat WhatsApp: penerima cukup mengetuk berkasnya dan memilih Petaku.'));
+  for (const l of list) { const cb = h('input', { type: 'checkbox', checked: true }); cb.addEventListener('change', () => { cb.checked ? sel.add(l.id) : sel.delete(l.id); }); body.append(h('label', { style: { display: 'flex', gap: '8px', alignItems: 'center', margin: '6px 0' } }, cb, l.name)); }
+  const go = h('button', { class: 'btn' }, 'Bagikan');
+  go.onclick = async () => { go.disabled = true; try { const ls = list.filter((l) => sel.has(l.id)); if (!ls.length) throw new Error('Pilih minimal satu layer'); await shareLayerPack(ls); close(); } catch (e) { toast(e.message || String(e), 4000); go.disabled = false; } };
+  body.append(h('div', { class: 'btns' }, go));
+  const close = openSheet('Bagikan paket layer', body);
+}
+
 export function renderLayers() {
   const el = $('#p-layers');
   el.innerHTML = '';
@@ -85,7 +99,13 @@ export function renderLayers() {
     for (const f of fs) last = await importLayerFile(f) || last;
     renderLayers();
     if (last) editLayer(last);
-  } }, '+ Impor layer dari HP')));
+  } }, '+ Impor layer dari HP'),
+    h('button', { class: 'btn sec', onclick: async () => {
+      const fs = await pickFile('.zip,application/zip,application/x-zip-compressed', false);
+      if (!fs || !fs[0]) return;
+      try { const r = await importLayerPack(new Uint8Array(await fs[0].arrayBuffer())); toast(`Paket layer: ${r.added} ditambahkan, ${r.replaced} diperbarui`, 4000); renderLayers(); } catch (e) { toast('Gagal impor paket: ' + e.message, 4500); }
+    } }, '📦 Impor paket layer (.zip)'),
+    isAdmin() ? h('button', { class: 'btn sec', onclick: openPackShare }, '📤 Bagikan paket layer') : null));
   el.append(top);
   const rev = [...S.layers].reverse();
   for (const l of rev) {

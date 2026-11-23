@@ -17,6 +17,8 @@ import { requireLogin, backgroundCheck, isAdmin } from './auth.js';
 import { fbOn } from './firebase.js';
 import { pull } from './sync.js';
 import { PRESETS } from './ui-tables.js';
+import { importLayerPack } from './layerpack.js';
+import { isZip } from './zip.js';
 import { initNotes, onNotes, syncNotes, flush, notesOn } from './notes.js';
 applyUiMode();
 try { window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyUiMode); } catch (e) { /* abaikan */ }
@@ -46,6 +48,11 @@ async function handleIncoming(r) {
   const file = new File([base64ToBytes(r.data)], name);
   const ext = (name.split('.').pop() || '').toLowerCase();
   try {
+    if (ext === 'zip' || isZip(new Uint8Array(await file.slice(0, 4).arrayBuffer()))) {
+      showPage('layers');
+      const r = await importLayerPack(new Uint8Array(await file.arrayBuffer()));
+      toast(`Paket layer diimpor: ${r.added} ditambahkan, ${r.replaced} diperbarui`, 5000); renderLayers(); return;
+    }
     if (ext === 'kml' || ext === 'geojson') { showPage('layers'); await importLayerFile(file); return; }
     if (ext === 'json') {
       const txt = await file.text();
