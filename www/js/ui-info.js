@@ -40,6 +40,8 @@ async function copy(t) {
   }
 }
 
+export const DEFAULT_INFO_COLS = (th, hmap) => { const out = [], f = th.field && hmap[String(th.field).toLowerCase().trim()]; if (f) out.push(f); for (const m of METRICS) { const c = hmap[m.toLowerCase()]; if (c && !out.includes(c)) out.push(c); } return out; };
+
 export function buildBlockCard(layer, feat) {
   const th = theme(), row = feat._row, props = feat.props || {};
   const blok = getProp(props, layer.keyField) || layer.name;
@@ -56,7 +58,7 @@ export function buildBlockCard(layer, feat) {
   if (row) for (const k of ['Status', 'LA']) { const v = getField(row, k); if (!HIDE_EMPTY(v)) badges.append(h('span', { class: 'bdg dark' }, k === 'LA' ? 'LA' : `${k}: ${String(v).trim()}`)); }
   hd.append(badges);
   card.append(hd);
-  if (ci) card.append(h('div', { class: 'ic-class', style: { background: ci.color, color: contrast(ci.color) } }, h('small', {}, th.legendTitle || th.name), h('b', {}, ci.label)));
+  if (ci && (th.info || {}).banner !== false) card.append(h('div', { class: 'ic-class', style: { background: ci.color, color: contrast(ci.color) } }, h('small', {}, th.legendTitle || th.name), h('b', {}, ci.label)));
 
   if (!row) {
     card.append(h('div', { class: 'ic-none' }, S.ds ? 'Tidak ada baris CSV untuk blok ini.' : 'Belum ada CSV diimpor (tab Data).'));
@@ -66,8 +68,13 @@ export function buildBlockCard(layer, feat) {
     const used = new Set([key, 'Status', 'LA']);
     const mcols = [];
     const first = th.field && S.ds && S.ds.hmap[String(th.field).toLowerCase().trim()];
-    if (first) mcols.push(first);
-    for (const m of METRICS) { const c = S.ds.hmap[m.toLowerCase()]; if (c && !mcols.includes(c)) mcols.push(c); }
+    const cfgCols = th.info && Array.isArray(th.info.cols) ? th.info.cols : null;
+    if (cfgCols) {   // pilihan sendiri (tab Tema → Kartu info lokasi): sesuai urutan yang dipilih
+      for (const n of cfgCols) { const c = S.ds.hmap[String(n).toLowerCase().trim()]; if (c && !mcols.includes(c)) mcols.push(c); }
+    } else {
+      if (first) mcols.push(first);
+      for (const m of METRICS) { const c = S.ds.hmap[m.toLowerCase()]; if (c && !mcols.includes(c)) mcols.push(c); }
+    }
     for (const tb of buildTables(th, row, props, 'top')) card.append(tb);
     const grid = h('div', { class: 'ic-grid' });
     let nm = 0;

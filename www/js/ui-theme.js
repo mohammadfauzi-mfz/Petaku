@@ -1,3 +1,4 @@
+import { DEFAULT_INFO_COLS } from './ui-info.js';
 import { calcEditor } from './calc.js';
 import { S, theme, bump, defThemes, defRules, saveSoon, emit, getProp } from './model.js';
 import { PATTERNS } from './render.js';
@@ -190,6 +191,32 @@ function uniqueValues(t) {
   toast(set.length + ' kelas dibuat dari nilai unik');
 }
 
+
+// pilihan kotak angka di bagian atas kartu info lokasi
+function infoBody(t, rerender) {
+  t.info = t.info || {};
+  const hd = csvHeaders(), hm = {}; hd.forEach((x) => { hm[String(x).toLowerCase().trim()] = x; });
+  const cur = Array.isArray(t.info.cols) ? t.info.cols.filter((n) => hm[String(n).toLowerCase().trim()]).map((n) => hm[String(n).toLowerCase().trim()]) : null;
+  const sel = cur || DEFAULT_INFO_COLS(t, hm);
+  const set = (arr) => { t.info.cols = arr; touch(); rerender(); };
+  const kids = [h('div', { class: 'mut small' }, 'Pilih kolom CSV yang tampil sebagai kotak angka di bagian atas kartu info lokasi, dan atur urutannya. Kolom kosong di CSV otomatis tidak ditampilkan.'),
+    check(t.info.banner !== false, (v) => { t.info.banner = v; touch(); }, 'Tampilkan banner kelas warna (mis. “Pencapaian YOY: 90% - 94%”)')];
+  if (!hd.length) { kids.push(h('div', { class: 'mut small' }, 'Belum ada CSV — impor di tab Data.')); return kids; }
+  kids.push(h('div', { class: 'mut small', style: { marginTop: '8px' } }, cur ? 'Pilihan sendiri.' : 'Memakai pengaturan bawaan (kolom tema + Yld, YOY, BBC3, BBC3S, std.S3, AP, Evaluasi).'));
+  sel.forEach((n, i) => kids.push(h('div', { class: 'cellrow', style: { alignItems: 'center', gap: '6px' } },
+    h('div', { style: { flex: 1, fontWeight: '600' } }, (i + 1) + '. ' + n),
+    h('button', { class: 'btn sec sm', disabled: i === 0, onclick: () => { const a = sel.slice(); [a[i - 1], a[i]] = [a[i], a[i - 1]]; set(a); } }, '↑'),
+    h('button', { class: 'btn sec sm', disabled: i === sel.length - 1, onclick: () => { const a = sel.slice(); [a[i + 1], a[i]] = [a[i], a[i + 1]]; set(a); } }, '↓'),
+    h('button', { class: 'btn red sm', onclick: () => set(sel.filter((x) => x !== n)) }, 'Hapus'))));
+  const rest = hd.filter((x) => !sel.includes(x));
+  if (rest.length) {
+    const pick = select([['', '+ Tambah kolom…'], ...rest.map((x) => [x, x])], '', (v) => { if (v) set([...sel, v]); });
+    kids.push(h('div', { style: { margin: '8px 0' } }, pick));
+  }
+  kids.push(h('div', { class: 'btns' }, h('button', { class: 'btn sec sm', onclick: () => { t.info.cols = null; touch(); rerender(); } }, 'Kembali ke bawaan')));
+  return kids;
+}
+
 export function renderTheme() {
   const el = $('#p-theme');
   el.innerHTML = '';
@@ -282,6 +309,7 @@ export function renderTheme() {
       h('button', { class: 'btn sec sm', onclick: () => { t.legendImage = 'asset:assets/kurva.jpg'; touch(); rerender(); } }, 'Kurva BBC'),
       h('button', { class: 'btn red sm', onclick: () => { t.legendImage = ''; touch(); rerender(); } }, 'Hapus')),
     h('div', { class: 'mut small' }, t.legendImage ? (t.legendImage.startsWith('asset:') ? 'Gambar bawaan dipakai' : 'Gambar sendiri dipakai') : 'Tidak ada gambar')];
+  ed.append(section('inf', 'Kartu info lokasi (angka utama)', ...infoBody(t, rerender)));
   ed.append(section('tbl', 'Tabel info lokasi', tablesBody(t, rerender)));
   ed.append(section('chr', 'Grafik info lokasi', chartsBody(t, rerender)));
   ed.append(section('img', 'Gambar legenda', ...imgKids));
